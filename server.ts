@@ -53,12 +53,11 @@ async function startServer() {
     origin: (origin, callback) => {
       console.log('CORS Request Origin:', origin);
       // Allow AI Studio preview URLs and localhost
-      if (!origin || origin.endsWith('.run.app') || origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('google.com')) {
+      if (!origin || origin.endsWith('.run.app') || origin.includes('localhost') || origin.includes('127.0.0.1')) {
         callback(null, true);
       } else {
         console.warn('CORS Blocked for Origin:', origin);
-        // Instead of error, just allow for now to debug
-        callback(null, true);
+        callback(new Error('Not allowed by CORS'));
       }
     },
     credentials: true
@@ -86,6 +85,17 @@ async function startServer() {
     }
   }));
 
+  // Auth Middleware
+  const requireAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const session = (req as any).session;
+    if (session && session.tokens) {
+      next();
+    } else {
+      console.warn(`[TACTICAL AUTH] Unauthorized access attempt to ${req.url}`);
+      res.status(401).json({ error: 'Unauthorized: No tactical session found' });
+    }
+  };
+
   // API Routes
   app.get('/api/auth/test', (req, res) => {
     (req as any).session.test = 'ok';
@@ -96,7 +106,7 @@ async function startServer() {
     });
   });
 
-  app.get('/api/leads', async (req, res) => {
+  app.get('/api/leads', requireAuth, async (req, res) => {
     try {
       const snapshot = await adminDb.collection('leads').get();
       const leads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -257,9 +267,8 @@ async function startServer() {
     });
   });
 
-  app.post('/api/gcp/initialize', async (req, res) => {
+  app.post('/api/gcp/initialize', requireAuth, async (req, res) => {
     const tokens = (req as any).session?.tokens;
-    if (!tokens?.access_token) return res.status(401).json({ error: 'Not authenticated' });
 
     try {
       console.log('TACTICAL LOG: Initializing GCP Radar Services...');
@@ -330,10 +339,8 @@ async function startServer() {
     }
   });
 
-  app.get('/api/gcp/place-details/:placeId', async (req, res) => {
+  app.get('/api/gcp/place-details/:placeId', requireAuth, async (req, res) => {
     const tokens = (req as any).session?.tokens;
-    if (!tokens?.access_token) return res.status(401).json({ error: 'Not authenticated' });
-
     const { placeId } = req.params;
     try {
       console.log(`TACTICAL LOG: Fetching details for Place ID: ${placeId}`);
