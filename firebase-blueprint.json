@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "Lead": {
+      "title": "Lead",
+      "description": "A sales lead captured from Google Places or manually.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the lead." },
+        "userId": { "type": "string", "description": "Owner of the lead record." },
+        "name": { "type": "string", "description": "Business name." },
+        "placeId": { "type": "string", "description": "Google Place ID." },
+        "rating": { "type": "number", "description": "Google Rating." },
+        "userRatingCount": { "type": "number", "description": "Number of reviews." },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "formattedAddress": { "type": "string" },
+        "monetaryValue": { "type": "number", "description": "Manually assigned monetary value." },
+        "bornOn": { "type": "string", "format": "date-time", "description": "Timestamp when the record was created." },
+        "lastUpdated": { "type": "string", "format": "date-time", "description": "Timestamp of the last Google data fetch." },
+        "industry": { "type": "string", "description": "Industry type for AI coaching." },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "name", "bornOn", "lastUpdated"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile and onboarding status.",
+      "type": "object",
+      "properties": {
+        "onboardingCompleted": { "type": "boolean" },
+        "projectId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["onboardingCompleted", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "leads": {
+      "schema": "Lead",
+      "description": "Collection of sales leads."
+    },
+    "users": {
+      "schema": "User",
+      "description": "User profiles and onboarding status."
+    }
+  }
+}

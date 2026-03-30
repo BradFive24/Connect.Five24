@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: leads
+    // Document ID: auto-generated
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required) - Owner of the lead
+    //   - name: string (required)
+    //   - placeId: string (optional)
+    //   - rating: number (optional)
+    //   - userRatingCount: number (optional)
+    //   - location: map { lat: number, lng: number } (required)
+    //   - formattedAddress: string (optional)
+    //   - monetaryValue: number (required, default 0)
+    //   - bornOn: string (required, ISO 8601)
+    //   - lastUpdated: string (required, ISO 8601)
+    //   - industry: string (optional)
+    //   - notes: string (optional)
+    //
+    // Collection: users
+    // Document ID: user email
+    // Fields:
+    //   - onboardingCompleted: boolean (required)
+    //   - projectId: string (optional)
+    //   - updatedAt: string (required, ISO 8601)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == "brad@524-photo.com" && 
+        request.auth.token.email_verified == true
+      );
+    }
+
+    function isValidLead(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.monetaryValue is number && data.monetaryValue >= 0 &&
+             data.bornOn is string && data.lastUpdated is string &&
+             data.location is map && data.location.lat is number && data.location.lng is number;
+    }
+
+    function isValidUser(data) {
+      return data.onboardingCompleted is bool &&
+             data.updatedAt is string;
+    }
+
+    match /leads/{leadId} {
+      allow read: if isAuthenticated() && (isOwner(resource.data.userId) || isAdmin());
+      allow create: if isAuthenticated() && isValidLead(request.resource.data) && (isOwner(request.resource.data.userId) || isAdmin());
+      allow update: if isAuthenticated() && isValidLead(request.resource.data) && (isOwner(resource.data.userId) || isAdmin()) && (request.resource.data.userId == resource.data.userId);
+      allow delete: if isAuthenticated() && (isOwner(resource.data.userId) || isAdmin());
+    }
+
+    match /users/{email} {
+      allow read: if isAuthenticated() && (request.auth.token.email == email || isAdmin());
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (request.auth.token.email == email || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (request.auth.token.email == email || isAdmin());
+      allow delete: if isAdmin();
+    }
+  }
+}
