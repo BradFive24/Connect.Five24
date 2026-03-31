@@ -3,15 +3,17 @@ import { APIProvider, Map, AdvancedMarker, Pin, InfoWindow, useMap } from '@vis.
 import { Radar, Target, MessageSquare, Plus, RefreshCw, DollarSign, Clock, MapPin, Loader2, LogIn } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
+import { clsx } from 'clsx';
+import type { ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 import { db, auth } from './firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { collection, onSnapshot, query, addDoc, serverTimestamp, updateDoc, doc, getDoc, where } from 'firebase/firestore';
 import { Lead } from './types';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 import { seedInitialLeads } from './seed';
 import { getCoachPrompts, validateGeminiConnection } from './services/coachService';
 import { signIn, signOut } from './firebase';
+import { CoachPanel } from './components/CoachPanel';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -104,9 +106,6 @@ function App() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isCoachOpen, setIsCoachOpen] = useState(false);
   const [huntLocation, setHuntLocation] = useState({ lat: 37.42, lng: -122.08 });
-  const [coachData, setCoachData] = useState<{ connecting: string; problem: string; consequence: string } | null>(null);
-  const [isCoaching, setIsCoaching] = useState(false);
-  const [isScrubbing, setIsScrubbing] = useState(false);
   
   // Mission Briefing & Auth State
   const [authStatus, setAuthStatus] = useState<{ authenticated: boolean; onboardingCompleted: boolean; hasAccessToken: boolean; expiryDate?: number } | null>(null);
@@ -280,6 +279,10 @@ function App() {
         setTimeout(() => {
           checkAuthStatus();
         }, 1000);
+      } else if (event.data?.type === 'OAUTH_AUTH_ERROR') {
+        console.error('IDENTITY FAILED: Tactical link could not be established.', event.data.error);
+        setIsCheckingAuth(false);
+        // Optionally show a toast or alert here
       }
     };
     window.addEventListener('message', handleMessage);
@@ -295,8 +298,31 @@ function App() {
   const handleSelectLead = useCallback((lead: Lead) => {
     setSelectedLead(lead);
     setIsCoachOpen(true);
-    setCoachData(null); // Reset coach data for new lead
   }, []);
+
+  const handleUpdateNotes = async (newNotes: string) => {
+    if (!selectedLead) return;
+    try {
+      const leadRef = doc(db, 'leads', selectedLead.id);
+      await updateDoc(leadRef, { notes: newNotes });
+      const updatedDoc = await getDoc(leadRef);
+      setSelectedLead({ id: updatedDoc.id, ...updatedDoc.data() } as Lead);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `leads/${selectedLead.id}`);
+    }
+  };
+
+  const handleUpdateValue = async (newValue: number) => {
+    if (!selectedLead) return;
+    try {
+      const leadRef = doc(db, 'leads', selectedLead.id);
+      await updateDoc(leadRef, { monetaryValue: newValue });
+      const updatedDoc = await getDoc(leadRef);
+      setSelectedLead({ id: updatedDoc.id, ...updatedDoc.data() } as Lead);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `leads/${selectedLead.id}`);
+    }
+  };
 
   // Firestore Sync Effect
   useEffect(() => {
@@ -633,88 +659,6 @@ function App() {
     return diffDays > 25;
   };
 
-  const handleCoachMe = async () => {
-    if (!selectedLead) return;
-    setIsCoaching(true);
-    setIsCoachOpen(true);
-    
-    let industry = selectedLead.industry;
-    
-    // Leverage Google Places API to infer industry if not provided
-    if (!industry && selectedLead.placeId) {
-      try {
-        setTacticalStatus('Inferring Industry Dynamics...');
-        const res = await axios.get(`/api/gcp/place-details/${selectedLead.placeId}`, { withCredentials: true });
-        const details = res.data.result;
-        if (details && details.types && details.types.length > 0) {
-          // Map Google types to a readable industry string
-          // Filter out generic types like 'point_of_interest', 'establishment'
-          const specificTypes = details.types.filter((t: string) => !['point_of_interest', 'establishment', 'premise'].includes(t));
-          industry = specificTypes[0]?.replace(/_/g, ' ') || 'General Business';
-          console.log(`TACTICAL LOG: Inferred industry for ${selectedLead.name}: ${industry}`);
-          
-          // Optionally update the lead in Firestore with the inferred industry
-          const leadRef = doc(db, 'leads', selectedLead.id);
-          await updateDoc(leadRef, { industry });
-        }
-      } catch (error) {
-        console.warn('TACTICAL WARNING: Failed to infer industry via Places API:', error);
-      }
-    }
-
-    const data = await getCoachPrompts(industry || 'General Business', selectedLead.name);
-    setCoachData(data);
-    setIsCoaching(false);
-  };
-
-  const handleScrub = async () => {
-    if (!selectedLead) return;
-    setIsScrubbing(true);
-    // Simulate re-fetching Google Places data
-    setTimeout(async () => {
-      try {
-        const leadRef = doc(db, 'leads', selectedLead.id);
-        const now = new Date().toISOString();
-        await updateDoc(leadRef, {
-          lastUpdated: now,
-          rating: (selectedLead.rating || 4.0) + (Math.random() * 0.2 - 0.1),
-          userRatingCount: (selectedLead.userRatingCount || 100) + Math.floor(Math.random() * 10)
-        });
-        // Update local state
-        const updatedDoc = await getDoc(leadRef);
-        setSelectedLead({ id: updatedDoc.id, ...updatedDoc.data() } as Lead);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `leads/${selectedLead.id}`);
-      } finally {
-        setIsScrubbing(false);
-      }
-    }, 1500);
-  };
-
-  const handleUpdateValue = async (newValue: number) => {
-    if (!selectedLead) return;
-    try {
-      const leadRef = doc(db, 'leads', selectedLead.id);
-      await updateDoc(leadRef, { monetaryValue: newValue });
-      const updatedDoc = await getDoc(leadRef);
-      setSelectedLead({ id: updatedDoc.id, ...updatedDoc.data() } as Lead);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `leads/${selectedLead.id}`);
-    }
-  };
-
-  const handleUpdateNotes = async (newNotes: string) => {
-    if (!selectedLead) return;
-    try {
-      const leadRef = doc(db, 'leads', selectedLead.id);
-      await updateDoc(leadRef, { notes: newNotes });
-      const updatedDoc = await getDoc(leadRef);
-      setSelectedLead({ id: updatedDoc.id, ...updatedDoc.data() } as Lead);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `leads/${selectedLead.id}`);
-    }
-  };
-
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden">
       {/* Sidebar - Lead List */}
@@ -944,12 +888,6 @@ function App() {
 
         {/* Overlay Controls */}
         <div className="absolute top-6 left-6 flex flex-col gap-2">
-          {DEBUG_MODE && (
-            <div className="bg-rose-500/20 backdrop-blur-md border border-rose-500/50 p-2 rounded-lg text-[9px] font-bold uppercase tracking-tighter text-rose-400 flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-              Debug Mode: Maps JS API Required
-            </div>
-          )}
           <div className="bg-zinc-900/80 backdrop-blur-md border border-zinc-800 p-3 rounded-xl flex items-center gap-3 shadow-2xl">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <div className="flex flex-col">
@@ -958,270 +896,14 @@ function App() {
             </div>
           </div>
         </div>
-
-        {/* Lead Detail Popup - REMOVED in favor of Side Panel */}
-        <AnimatePresence>
-          {false && selectedLead && (
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20, scale: 0.95 }}
-              className="absolute bottom-10 left-1/2 -translate-x-1/2 w-[400px] bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden"
-            >
-              <div className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h2 className="text-xl font-bold mb-1">{selectedLead.name}</h2>
-                    <p className="text-xs text-zinc-500 flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {selectedLead.formattedAddress}
-                    </p>
-                  </div>
-                  <button 
-                    onClick={() => setSelectedLead(null)}
-                    className="text-zinc-500 hover:text-zinc-100"
-                  >
-                    <Plus className="w-5 h-5 rotate-45" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                    <span className="text-[10px] text-zinc-500 uppercase block mb-1">Monetary Value</span>
-                    <div className="flex items-center gap-2">
-                      <DollarSign className="w-4 h-4 text-emerald-500" />
-                      <input 
-                        type="number"
-                        defaultValue={selectedLead.monetaryValue}
-                        onBlur={(e) => handleUpdateValue(Number(e.target.value))}
-                        className="bg-transparent text-lg font-mono w-full outline-none focus:text-emerald-400"
-                      />
-                    </div>
-                  </div>
-                  <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                    <span className="text-[10px] text-zinc-500 uppercase block mb-1">Compliance Age</span>
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-zinc-400" />
-                      <span className={cn(
-                        "text-lg font-mono",
-                        isExpired(selectedLead.lastUpdated) ? "text-rose-500" : "text-zinc-400"
-                      )}>
-                        {Math.ceil(Math.abs(new Date().getTime() - new Date(selectedLead.lastUpdated).getTime()) / (1000 * 60 * 60 * 24))}d
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 mb-6">
-                  <span className="text-[10px] text-zinc-500 uppercase block mb-1">Tactical Notes</span>
-                  <textarea 
-                    key={selectedLead.id}
-                    defaultValue={selectedLead.notes || ""}
-                    onBlur={(e) => handleUpdateNotes(e.target.value)}
-                    placeholder="Add tactical intelligence here..."
-                    className="bg-transparent text-sm w-full outline-none focus:text-emerald-400 min-h-[80px] resize-none"
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  <button 
-                    onClick={handleCoachMe}
-                    disabled={isCoaching}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                  >
-                    {isCoaching ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
-                    Coach Me
-                  </button>
-                  <button 
-                    onClick={handleScrub}
-                    disabled={isScrubbing}
-                    className="bg-zinc-800 hover:bg-zinc-700 p-3 rounded-xl transition-colors disabled:opacity-50"
-                  >
-                    <RefreshCw className={cn("w-5 h-5", isScrubbing && "animate-spin")} />
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
-      {/* AI Coach Side Panel */}
-      <AnimatePresence>
-        {isCoachOpen && (
-          <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed right-0 top-0 h-full w-96 bg-zinc-900 border-l border-zinc-800 shadow-2xl z-50 flex flex-col"
-          >
-            <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Target className="w-5 h-5 text-emerald-500" />
-                <h2 className="font-bold uppercase tracking-widest text-sm">Tactical Intelligence</h2>
-              </div>
-              <button 
-                onClick={() => {
-                  setIsCoachOpen(false);
-                  setSelectedLead(null);
-                }}
-                className="text-zinc-500 hover:text-zinc-100"
-              >
-                <Plus className="w-6 h-6 rotate-45" />
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-              {selectedLead ? (
-                <>
-                  {/* Lead Profile */}
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h2 className="text-xl font-bold mb-1">{selectedLead.name}</h2>
-                        <p className="text-xs text-zinc-500 flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          {selectedLead.formattedAddress}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                        <span className="text-[10px] text-zinc-500 uppercase block mb-1">Monetary Value</span>
-                        <div className="flex items-center gap-2">
-                          <DollarSign className="w-4 h-4 text-emerald-500" />
-                          <input 
-                            type="number"
-                            defaultValue={selectedLead.monetaryValue}
-                            onBlur={(e) => handleUpdateValue(Number(e.target.value))}
-                            className="bg-transparent text-sm font-mono w-full outline-none focus:text-emerald-400"
-                          />
-                        </div>
-                      </div>
-                      <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                        <span className="text-[10px] text-zinc-500 uppercase block mb-1">Compliance Age</span>
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-zinc-400" />
-                          <span className={cn(
-                            "text-sm font-mono",
-                            isExpired(selectedLead.lastUpdated) ? "text-rose-500" : "text-zinc-400"
-                          )}>
-                            {Math.ceil(Math.abs(new Date().getTime() - new Date(selectedLead.lastUpdated).getTime()) / (1000 * 60 * 60 * 24))}d
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                      <span className="text-[10px] text-zinc-500 uppercase block mb-1">Tactical Notes</span>
-                      <textarea 
-                        key={selectedLead.id}
-                        defaultValue={selectedLead.notes || ""}
-                        onBlur={(e) => handleUpdateNotes(e.target.value)}
-                        placeholder="Add tactical intelligence here..."
-                        className="bg-transparent text-xs w-full outline-none focus:text-emerald-400 min-h-[60px] resize-none"
-                      />
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={handleCoachMe}
-                        disabled={isCoaching}
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                      >
-                        {isCoaching ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
-                        Coach Me
-                      </button>
-                      <button 
-                        onClick={handleScrub}
-                        disabled={isScrubbing}
-                        className="bg-zinc-800 hover:bg-zinc-700 p-2.5 rounded-xl transition-colors disabled:opacity-50"
-                      >
-                        <RefreshCw className={cn("w-4 h-4", isScrubbing && "animate-spin")} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="h-px bg-zinc-800" />
-
-                  {/* AI Coach Section */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <Target className="w-4 h-4 text-emerald-500" />
-                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">NEPQ Sales Coach</h3>
-                    </div>
-                    
-                    {isCoaching ? (
-                      <div className="flex flex-col items-center justify-center py-10 gap-4 opacity-50">
-                        <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
-                        <p className="text-[10px] font-mono animate-pulse uppercase tracking-widest">Analyzing Industry Dynamics...</p>
-                      </div>
-                    ) : coachData ? (
-                      <div className="space-y-3">
-                        <motion.div 
-                          initial={{ opacity: 0, x: 20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          className="p-4 bg-zinc-950 rounded-xl border border-zinc-800"
-                        >
-                          <span className="text-[10px] text-zinc-600 uppercase block mb-1 font-bold tracking-tighter">Connecting Question</span>
-                          <p className="text-sm italic text-zinc-300">"{coachData.connecting}"</p>
-                        </motion.div>
-                        <motion.div 
-                          initial={{ opacity: 0, x: 20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.1 }}
-                          className="p-4 bg-zinc-950 rounded-xl border border-zinc-800"
-                        >
-                          <span className="text-[10px] text-zinc-600 uppercase block mb-1 font-bold tracking-tighter">Problem Awareness</span>
-                          <p className="text-sm italic text-zinc-300">"{coachData.problem}"</p>
-                        </motion.div>
-                        <motion.div 
-                          initial={{ opacity: 0, x: 20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.2 }}
-                          className="p-4 bg-zinc-950 rounded-xl border border-zinc-800"
-                        >
-                          <span className="text-[10px] text-zinc-600 uppercase block mb-1 font-bold tracking-tighter">Consequence Question</span>
-                          <p className="text-sm italic text-zinc-300">"{coachData.consequence}"</p>
-                        </motion.div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-10 bg-zinc-950/50 rounded-xl border border-dashed border-zinc-800">
-                        <p className="text-[10px] text-zinc-600 uppercase tracking-widest">Click "Coach Me" to generate tactical prompts.</p>
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-6">
-                  <div className="w-20 h-20 bg-zinc-950 rounded-full flex items-center justify-center border border-zinc-800 shadow-inner">
-                    <Radar className="w-10 h-10 text-zinc-700 animate-pulse" />
-                  </div>
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-bold uppercase italic tracking-tighter">Tactical Coach Offline</h3>
-                    <p className="text-xs text-zinc-500 leading-relaxed">
-                      Select a lead on the radar to activate the NEPQ AI Coach. 
-                      The system will analyze the target's industry and provide tactical sales prompts.
-                    </p>
-                  </div>
-                  <div className="w-full pt-6 border-t border-zinc-800/50">
-                    <div className="flex items-center gap-3 text-[10px] text-zinc-600 uppercase font-bold tracking-widest text-left">
-                      <div className="w-1 h-1 rounded-full bg-emerald-500" />
-                      Satellite Link: Active
-                    </div>
-                    <div className="flex items-center gap-3 text-[10px] text-zinc-600 uppercase font-bold tracking-widest text-left mt-2">
-                      <div className="w-1 h-1 rounded-full bg-emerald-500" />
-                      Gemini AI: Ready
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Coach Panel */}
+      <CoachPanel 
+        isOpen={isCoachOpen}
+        onClose={() => setIsCoachOpen(false)}
+        lead={selectedLead}
+      />
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {

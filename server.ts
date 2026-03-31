@@ -1,6 +1,7 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import session from 'express-session';
 import { initializeApp } from 'firebase-admin/app';
@@ -14,23 +15,53 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Initialize Firebase Admin for server-side fetching
+const getAdminConfig = () => {
+  try {
+    let configStr = process.env.FIREBASE_WEBAPP_CONFIG;
+    
+    // Fallback to firebase-applet-config.json if env var is missing
+    if (!configStr) {
+      const configPath = path.resolve(__dirname, 'firebase-applet-config.json');
+      if (fs.existsSync(configPath)) {
+        configStr = fs.readFileSync(configPath, 'utf-8');
+      }
+    }
+
+    if (configStr) {
+      const config = JSON.parse(configStr);
+      return {
+        projectId: config.projectId,
+        databaseId: config.firestoreDatabaseId || '(default)'
+      };
+    }
+  } catch (error) {
+    console.error('Failed to parse FIREBASE_WEBAPP_CONFIG in server:', error);
+  }
+  // Fallback to hardcoded values for local dev if not in env or file
+  return {
+    projectId: 'gen-lang-client-0470290044',
+    databaseId: 'ai-studio-bd05be3f-6d8f-43fb-9650-10916abf7e85'
+  };
+};
+
+const adminConfig = getAdminConfig();
 const adminApp = initializeApp({
-  projectId: 'five24-lead-tracker-9644-5809c',
+  projectId: adminConfig.projectId,
 });
-const adminDb = getFirestore(adminApp, 'ai-studio-bd05be3f-6d8f-43fb-9650-10916abf7e85');
+const adminDb = getFirestore(adminApp, adminConfig.databaseId);
 
 // OAuth Configuration
 const rawAppUrl = process.env.APP_URL || 'https://connect.five24creativestudio.com';
 const APP_URL = rawAppUrl.endsWith('/') ? rawAppUrl.slice(0, -1) : rawAppUrl;
-const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+
+// Trim whitespace and quotes to prevent common copy-paste errors
+const CLIENT_ID = process.env.GOOGLE_CLIENT_ID?.trim().replace(/^["']|["']$/g, '');
+const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET?.trim().replace(/^["']|["']$/g, '');
 const REDIRECT_URI = `${APP_URL}/auth/callback`;
 
 if (!CLIENT_ID || !CLIENT_SECRET) {
   console.warn('WARNING: GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set. OAuth will fail.');
 }
-
-const oauth2Client = new OAuth2Client(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
 
 async function startServer() {
   const app = express();
@@ -40,8 +71,8 @@ async function startServer() {
   console.log('Environment Check:');
   console.log('- NODE_ENV:', process.env.NODE_ENV);
   console.log('- APP_URL:', APP_URL);
-  console.log('- GOOGLE_CLIENT_ID:', CLIENT_ID ? 'SET' : 'MISSING');
-  console.log('- GOOGLE_CLIENT_SECRET:', CLIENT_SECRET ? 'SET' : 'MISSING');
+  console.log('- GOOGLE_CLIENT_ID:', CLIENT_ID ? `SET (${CLIENT_ID.substring(0, 10)}...)` : 'MISSING');
+  console.log('- GOOGLE_CLIENT_SECRET:', CLIENT_SECRET ? `SET (Length: ${CLIENT_SECRET.length}, Starts with: ${CLIENT_SECRET.substring(0, 4)}...)` : 'MISSING');
   console.log('- REDIRECT_URI:', REDIRECT_URI);
   
   if (APP_URL.includes('localhost') && process.env.NODE_ENV === 'production') {
@@ -98,11 +129,24 @@ async function startServer() {
 
   // API Routes
   app.get('/api/auth/test', (req, res) => {
-    (req as any).session.test = 'ok';
+    const currentAppUrl = getAppUrl(req);
+    const dynamicRedirectUri = `${currentAppUrl}/auth/callback`;
+    
     res.json({ 
-      session: (req as any).session,
-      cookies: req.headers.cookie,
-      trustProxy: app.get('trust proxy')
+      session: (req as any).session ? 'exists' : 'missing',
+      cookies: req.headers.cookie ? 'present' : 'none',
+      trustProxy: app.get('trust proxy'),
+      env: {
+        NODE_ENV: process.env.NODE_ENV,
+        APP_URL: APP_URL,
+        CLIENT_ID_SET: !!CLIENT_ID,
+      },
+      detected: {
+        currentAppUrl,
+        dynamicRedirectUri,
+        host: req.headers.host,
+        proto: req.headers['x-forwarded-proto']
+      }
     });
   });
 
@@ -120,15 +164,23 @@ async function startServer() {
   // OAuth Routes
   // Dynamic URL helper
   const getAppUrl = (req: express.Request) => {
-    // If APP_URL is set to the production domain, prioritize it
-    if (APP_URL && !APP_URL.includes('.run.app')) {
+    // In AI Studio, we often want the dynamic URL for previews to work correctly
+    // especially for the redirect_uri to match the current environment.
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers.host;
+    const dynamicUrl = `${protocol}://${host}`;
+    
+    // If the current host is a .run.app (AI Studio preview), use it.
+    if (host && host.includes('.run.app')) {
+      return dynamicUrl;
+    }
+
+    // Otherwise, if APP_URL is set and seems like a custom domain, use it.
+    if (APP_URL && !APP_URL.includes('localhost')) {
       return APP_URL;
     }
     
-    // Otherwise, use dynamic detection (useful for AI Studio previews)
-    const protocol = req.headers['x-forwarded-proto'] || 'https';
-    const host = req.headers.host;
-    return `${protocol}://${host}`;
+    return dynamicUrl;
   };
 
   app.get('/api/auth/url', (req, res) => {
@@ -171,16 +223,18 @@ async function startServer() {
     const dynamicRedirectUri = `${currentAppUrl}/auth/callback`;
 
     try {
-      console.log('Exchanging code for tokens...');
+      console.log('[TACTICAL AUTH] Exchanging code for tokens...');
+      console.log('[TACTICAL AUTH] Using Redirect URI:', dynamicRedirectUri);
+      
       const oauth2ClientDynamic = new OAuth2Client(CLIENT_ID, CLIENT_SECRET, dynamicRedirectUri);
       const { tokens } = await oauth2ClientDynamic.getToken(code as string);
-      console.log('Tokens received successfully.');
+      console.log('[TACTICAL AUTH] Tokens received successfully.');
       
       if ((req as any).session) {
         (req as any).session.tokens = tokens;
-        console.log('Session tokens set in express-session.');
+        console.log('[TACTICAL AUTH] Session tokens set.');
         (req as any).session.save((err: any) => {
-          if (err) console.error('Session save error:', err);
+          if (err) console.error('[TACTICAL AUTH] Session save error:', err);
           
           res.send(`
             <html>
@@ -202,12 +256,38 @@ async function startServer() {
           `);
         });
       } else {
-        console.error('Session object missing from request.');
+        console.error('[TACTICAL AUTH] Session object missing.');
         res.status(500).send('Session initialization failed');
       }
-    } catch (error) {
-      console.error('OAuth callback error:', error);
-      res.status(500).send('Authentication failed');
+    } catch (error: any) {
+      console.error('[TACTICAL AUTH] Callback error:', error);
+      const errorDetail = error.response?.data || error.message || 'Unknown error';
+      
+      // Provide a more helpful error page
+      res.status(500).send(`
+        <html>
+          <body style="background: #09090b; color: #ef4444; font-family: sans-serif; padding: 40px;">
+            <h1>Authentication Failed</h1>
+            <pre style="background: #18181b; padding: 20px; border-radius: 8px; color: #f87171; overflow: auto;">
+${JSON.stringify(errorDetail, null, 2)}
+            </pre>
+            <div style="margin-top: 20px; color: #71717a;">
+              <p>Common causes:</p>
+              <ul style="text-align: left; display: inline-block;">
+                <li>Invalid Client Secret (Check AI Studio Secrets)</li>
+                <li>Invalid Client ID (Check AI Studio Secrets)</li>
+                <li>Redirect URI mismatch in Google Cloud Console</li>
+              </ul>
+            </div>
+            <button onclick="window.close()" style="margin-top: 20px; background: #27272a; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer;">Close Window</button>
+            <script>
+              if (window.opener) {
+                window.opener.postMessage({ type: 'OAUTH_AUTH_ERROR', error: ${JSON.stringify(errorDetail)} }, '*');
+              }
+            </script>
+          </body>
+        </html>
+      `);
     }
   });
 
@@ -224,11 +304,14 @@ async function startServer() {
     console.log('Origin:', req.headers.origin);
     console.log('Referer:', req.headers.referer);
     console.log('-------------------------');
+    
+    const currentAppUrl = getAppUrl(req);
+    const dynamicRedirectUri = `${currentAppUrl}/auth/callback`;
 
     let onboardingCompleted = false;
     if (authenticated && tokens.access_token) {
       try {
-        const oauth2Client = new OAuth2Client(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
+        const oauth2Client = new OAuth2Client(CLIENT_ID, CLIENT_SECRET, dynamicRedirectUri);
         oauth2Client.setCredentials(tokens);
         
         if (tokens.id_token) {
@@ -260,8 +343,8 @@ async function startServer() {
       hasAccessToken: !!tokens?.access_token,
       expiryDate: tokens?.expiry_date,
       debug: {
-        redirectUri: REDIRECT_URI,
-        appUrl: APP_URL,
+        redirectUri: dynamicRedirectUri,
+        appUrl: currentAppUrl,
         clientIdSet: !!CLIENT_ID
       }
     });
@@ -304,7 +387,9 @@ async function startServer() {
       ));
 
       // 3. Mark onboarding as completed in Firestore
-      const oauth2Client = new OAuth2Client(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
+      const currentAppUrl = getAppUrl(req);
+      const dynamicRedirectUri = `${currentAppUrl}/auth/callback`;
+      const oauth2Client = new OAuth2Client(CLIENT_ID, CLIENT_SECRET, dynamicRedirectUri);
       oauth2Client.setCredentials(tokens);
       
       let userEmail = 'unknown';
