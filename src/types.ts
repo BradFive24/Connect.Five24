@@ -1,19 +1,44 @@
+export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal' | 'closed' | 'lost';
+
+export interface Interaction {
+  id: string;
+  type: 'call' | 'visit' | 'note' | 'status_change';
+  content: string;
+  timestamp: string;
+}
+
 export interface Lead {
   id: string;
-  name: string;
-  placeId?: string;
-  rating?: number;
-  userRatingCount?: number;
-  location: {
-    lat: number;
-    lng: number;
+  userId: string;
+  placeId: string;
+  source: {
+    name: string;
+    formattedAddress: string;
+    phoneNumber: string;
+    rating?: number;
+    userRatingCount?: number;
+    location: {
+      lat: number;
+      lng: number;
+    };
+    lastSynced: string;
   };
-  formattedAddress?: string;
-  monetaryValue: number;
-  bornOn: string;
-  lastUpdated: string;
-  industry?: string;
-  notes?: string;
+  crm: {
+    ownerName: string;
+    managerName: string;
+    email: string;
+    notes: string;
+    status: LeadStatus;
+    tags: string[];
+    interactionHistory: Interaction[];
+    nextStep?: string;
+    lastContacted?: string;
+    monetaryValue: number;
+  };
+  compliance: {
+    verifiedByEU: boolean;
+    collectedAt: string;
+  };
 }
 
 export interface UserProfile {

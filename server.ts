@@ -3,7 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import session from 'express-session';
+import cookieSession from 'cookie-session';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import cookieParser from 'cookie-parser';
@@ -67,7 +67,7 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  console.log('Starting Tactical Server...');
+  console.log('Starting Five24 Connect Server...');
   console.log('Environment Check:');
   console.log('- NODE_ENV:', process.env.NODE_ENV);
   console.log('- APP_URL:', APP_URL);
@@ -82,38 +82,39 @@ async function startServer() {
   app.set('trust proxy', 1);
   app.use(cors({
     origin: (origin, callback) => {
-      console.log('CORS Request Origin:', origin);
-      // Allow AI Studio preview URLs and localhost
-      if (!origin || origin.endsWith('.run.app') || origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      // Allow all .run.app origins (AI Studio) and local development
+      if (!origin || 
+          origin.endsWith('.run.app') || 
+          origin.includes('localhost') || 
+          origin.includes('127.0.0.1') ||
+          origin.includes('five24creativestudio.com')) {
         callback(null, true);
       } else {
-        console.warn('CORS Blocked for Origin:', origin);
+        console.warn('[CORS] Blocked Origin:', origin);
         callback(new Error('Not allowed by CORS'));
       }
     },
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
   }));
   app.use(express.json());
-  app.use(cookieParser());
   
   // Request Logger
   app.use((req, res, next) => {
-    console.log(`[TACTICAL SERVER] ${req.method} ${req.url}`);
+    console.log(`[SERVER] ${req.method} ${req.url}`);
     next();
   });
 
-  app.use(session({
-    secret: 'five24-mission-secret-key-v5',
-    resave: false,
-    saveUninitialized: false,
-    proxy: true,
+  app.use(cookieSession({
     name: 'five24-session',
-    cookie: {
-      secure: true,
-      sameSite: 'none',
-      httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000
-    }
+    keys: ['five24-connect-secret-key-v1'],
+    maxAge: 24 * 60 * 60 * 1000,
+    secure: true,
+    sameSite: 'none',
+    httpOnly: true,
+    signed: true,
+    overwrite: true
   }));
 
   // Auth Middleware
@@ -122,8 +123,8 @@ async function startServer() {
     if (session && session.tokens) {
       next();
     } else {
-      console.warn(`[TACTICAL AUTH] Unauthorized access attempt to ${req.url}`);
-      res.status(401).json({ error: 'Unauthorized: No tactical session found' });
+      console.warn(`[AUTH] Unauthorized access attempt to ${req.url}`);
+      res.status(401).json({ error: 'Unauthorized: No session found' });
     }
   };
 
@@ -188,14 +189,14 @@ async function startServer() {
       const currentAppUrl = getAppUrl(req);
       const dynamicRedirectUri = `${currentAppUrl}/auth/callback`;
       
-      console.log('--- TACTICAL OAUTH CONFIG ---');
+      console.log('--- OAUTH URL REQUEST ---');
       console.log('Current App URL:', currentAppUrl);
       console.log('Redirect URI:', dynamicRedirectUri);
       console.log('CLIENT_ID:', CLIENT_ID ? 'SET' : 'MISSING');
-      console.log('-----------------------------');
+      console.log('-------------------------');
       
       if (!CLIENT_ID || !CLIENT_SECRET) {
-        throw new Error('Google OAuth credentials missing on server');
+        throw new Error('Google OAuth credentials missing on server. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in environment variables.');
       }
 
       const oauth2ClientDynamic = new OAuth2Client(CLIENT_ID, CLIENT_SECRET, dynamicRedirectUri);
@@ -223,44 +224,41 @@ async function startServer() {
     const dynamicRedirectUri = `${currentAppUrl}/auth/callback`;
 
     try {
-      console.log('[TACTICAL AUTH] Exchanging code for tokens...');
-      console.log('[TACTICAL AUTH] Using Redirect URI:', dynamicRedirectUri);
+      console.log('[AUTH] Exchanging code for tokens...');
+      console.log('[AUTH] Using Redirect URI:', dynamicRedirectUri);
       
       const oauth2ClientDynamic = new OAuth2Client(CLIENT_ID, CLIENT_SECRET, dynamicRedirectUri);
       const { tokens } = await oauth2ClientDynamic.getToken(code as string);
-      console.log('[TACTICAL AUTH] Tokens received successfully.');
+      console.log('[AUTH] Tokens received successfully.');
       
       if ((req as any).session) {
         (req as any).session.tokens = tokens;
-        console.log('[TACTICAL AUTH] Session tokens set.');
-        (req as any).session.save((err: any) => {
-          if (err) console.error('[TACTICAL AUTH] Session save error:', err);
-          
-          res.send(`
-            <html>
-              <body style="background: #09090b; color: #10b981; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh;">
-                <div style="text-align: center;">
-                  <h1 style="margin-bottom: 10px;">IDENTITY CONNECTED</h1>
-                  <p style="color: #71717a;">Closing tactical link...</p>
-                  <script>
-                    if (window.opener) {
-                      window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, '*');
-                      setTimeout(() => window.close(), 100);
-                    } else {
-                      window.location.href = '/';
-                    }
-                  </script>
-                </div>
-              </body>
-            </html>
-          `);
-        });
+        console.log('[AUTH] Session tokens set.');
+        
+        res.send(`
+          <html>
+            <body style="background: #09090b; color: #10b981; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh;">
+              <div style="text-align: center;">
+                <h1 style="margin-bottom: 10px;">IDENTITY CONNECTED</h1>
+                <p style="color: #71717a;">Closing link...</p>
+                <script>
+                  if (window.opener) {
+                    window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, '*');
+                    setTimeout(() => window.close(), 100);
+                  } else {
+                    window.location.href = '/';
+                  }
+                </script>
+              </div>
+            </body>
+          </html>
+        `);
       } else {
-        console.error('[TACTICAL AUTH] Session object missing.');
+        console.error('[AUTH] Session object missing.');
         res.status(500).send('Session initialization failed');
       }
     } catch (error: any) {
-      console.error('[TACTICAL AUTH] Callback error:', error);
+      console.error('[AUTH] Callback error:', error);
       const errorDetail = error.response?.data || error.message || 'Unknown error';
       
       // Provide a more helpful error page
@@ -297,12 +295,9 @@ ${JSON.stringify(errorDetail, null, 2)}
     const authenticated = !!tokens;
     
     console.log('--- AUTH STATUS CHECK ---');
-    console.log('Session ID exists:', !!session);
+    console.log('Session exists:', !!session);
     console.log('Tokens exist:', authenticated);
     console.log('Cookies received:', req.headers.cookie);
-    console.log('User-Agent:', req.headers['user-agent']);
-    console.log('Origin:', req.headers.origin);
-    console.log('Referer:', req.headers.referer);
     console.log('-------------------------');
     
     const currentAppUrl = getAppUrl(req);
@@ -332,8 +327,8 @@ ${JSON.stringify(errorDetail, null, 2)}
         } else {
           console.warn('No id_token found in session tokens.');
         }
-      } catch (error) {
-        console.error('Error checking onboarding status:', error);
+      } catch (error: any) {
+        console.error('Error checking onboarding status:', error.message);
       }
     }
 
@@ -345,16 +340,23 @@ ${JSON.stringify(errorDetail, null, 2)}
       debug: {
         redirectUri: dynamicRedirectUri,
         appUrl: currentAppUrl,
-        clientIdSet: !!CLIENT_ID
+        clientIdSet: !!CLIENT_ID,
+        sessionExists: !!session,
+        tokensExist: authenticated
       }
     });
+  });
+
+  app.post('/api/auth/logout', (req, res) => {
+    (req as any).session = null;
+    res.json({ success: true });
   });
 
   app.post('/api/gcp/initialize', requireAuth, async (req, res) => {
     const tokens = (req as any).session?.tokens;
 
     try {
-      console.log('TACTICAL LOG: Initializing GCP Radar Services...');
+      console.log('LOG: Initializing GCP Radar Services...');
       
       // 1. Get user's projects
       const projectsRes = await axios.get('https://cloudresourcemanager.googleapis.com/v1/projects', {
@@ -367,7 +369,7 @@ ${JSON.stringify(errorDetail, null, 2)}
       }
 
       const projectId = projects[0].projectId;
-      console.log(`TACTICAL LOG: Target Project ID: ${projectId}`);
+      console.log(`LOG: Target Project ID: ${projectId}`);
       
       // 2. Enable Maps and Places APIs in PARALLEL to prevent hangup
       const apisToEnable = [
@@ -376,7 +378,7 @@ ${JSON.stringify(errorDetail, null, 2)}
         'geocoding-backend.googleapis.com'
       ];
 
-      console.log('TACTICAL LOG: Enabling Radar APIs...');
+      console.log('LOG: Enabling Radar APIs...');
       await Promise.all(apisToEnable.map(api => 
         axios.post(`https://serviceusage.googleapis.com/v1/projects/${projectId}/services/${api}:enable`, {}, {
           headers: { Authorization: `Bearer ${tokens.access_token}` }
@@ -428,7 +430,7 @@ ${JSON.stringify(errorDetail, null, 2)}
     const tokens = (req as any).session?.tokens;
     const { placeId } = req.params;
     try {
-      console.log(`TACTICAL LOG: Fetching details for Place ID: ${placeId}`);
+      console.log(`LOG: Fetching details for Place ID: ${placeId}`);
       const response = await axios.get(`https://maps.googleapis.com/maps/api/place/details/json`, {
         params: {
           place_id: placeId,
@@ -446,6 +448,12 @@ ${JSON.stringify(errorDetail, null, 2)}
       console.error('Place Details Error:', error.response?.data || error.message);
       res.status(500).json({ error: 'Failed to fetch place details' });
     }
+  });
+
+  // Catch-all for API routes to prevent falling through to Vite SPA fallback
+  app.all('/api/*', (req, res) => {
+    console.warn(`[API] 404 Not Found: ${req.method} ${req.url}`);
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
   });
 
   // Vite middleware for development

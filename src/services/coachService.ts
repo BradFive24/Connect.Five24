@@ -20,7 +20,7 @@ export async function validateGeminiConnection() {
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: "Respond with 'Tactical link established.'",
+      contents: "Respond with 'Connection established.'",
     });
 
     if (response.text) {
@@ -31,7 +31,7 @@ export async function validateGeminiConnection() {
     return false;
   } catch (error: any) {
     if (error?.status === 'RESOURCE_EXHAUSTED' || error?.code === 429) {
-      console.warn("GEMINI QUOTA EXCEEDED: Falling back to tactical defaults.");
+      console.warn("GEMINI QUOTA EXCEEDED: Falling back to defaults.");
       // Mark as "validated" to stop retrying during this session, even if it failed due to quota
       sessionStorage.setItem('gemini_validated', 'quota_exceeded');
       return false;
@@ -54,7 +54,7 @@ export async function getCoachPrompts(industry: string, leadName: string) {
   Target Lead: ${leadName}
   Industry: ${industry}
   
-  Provide 3 specific, tactical NEPQ questions for this lead:
+  Provide 3 specific NEPQ questions for this lead:
   1. A Connecting Question (to lower resistance)
   2. A Problem Awareness Question (to uncover pain)
   3. A Consequence Question (to create urgency)

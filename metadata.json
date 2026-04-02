@@ -1,5 +1,5 @@
 {
-  "name": "Five24 Connect (Solo Edition)",
-  "description": "A high-performance lead tracking application for field sales, featuring the Tactical Radar and AI sales coaching. Now in Public Beta with hardened security and multi-user support.",
+  "name": "Five24 Connect",
+  "description": "A high-performance lead tracking application for field sales, featuring a Sales Radar and AI sales coaching. Now in Public Beta with hardened security and multi-user support.",
   "requestFramePermissions": ["geolocation"]
 }

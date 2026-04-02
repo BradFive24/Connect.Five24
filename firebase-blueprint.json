@@ -2,30 +2,65 @@
   "entities": {
     "Lead": {
       "title": "Lead",
-      "description": "A sales lead captured from Google Places or manually.",
+      "description": "A sales lead with Google source data and user-owned CRM data.",
       "type": "object",
       "properties": {
-        "id": { "type": "string", "description": "Unique identifier for the lead." },
-        "userId": { "type": "string", "description": "Owner of the lead record." },
-        "name": { "type": "string", "description": "Business name." },
-        "placeId": { "type": "string", "description": "Google Place ID." },
-        "rating": { "type": "number", "description": "Google Rating." },
-        "userRatingCount": { "type": "number", "description": "Number of reviews." },
-        "location": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "placeId": { "type": "string" },
+        "source": {
           "type": "object",
           "properties": {
-            "lat": { "type": "number" },
-            "lng": { "type": "number" }
+            "name": { "type": "string" },
+            "formattedAddress": { "type": "string" },
+            "phoneNumber": { "type": "string" },
+            "rating": { "type": "number" },
+            "userRatingCount": { "type": "number" },
+            "location": {
+              "type": "object",
+              "properties": {
+                "lat": { "type": "number" },
+                "lng": { "type": "number" }
+              }
+            },
+            "lastSynced": { "type": "string", "format": "date-time" }
           }
         },
-        "formattedAddress": { "type": "string" },
-        "monetaryValue": { "type": "number", "description": "Manually assigned monetary value." },
-        "bornOn": { "type": "string", "format": "date-time", "description": "Timestamp when the record was created." },
-        "lastUpdated": { "type": "string", "format": "date-time", "description": "Timestamp of the last Google data fetch." },
-        "industry": { "type": "string", "description": "Industry type for AI coaching." },
-        "notes": { "type": "string" }
+        "crm": {
+          "type": "object",
+          "properties": {
+            "ownerName": { "type": "string" },
+            "managerName": { "type": "string" },
+            "email": { "type": "string" },
+            "notes": { "type": "string" },
+            "status": { "type": "string", "enum": ["new", "contacted", "follow-up", "closed"] },
+            "tags": { "type": "array", "items": { "type": "string" } },
+            "interactionHistory": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "type": { "type": "string", "enum": ["call", "visit", "note", "status_change"] },
+                  "content": { "type": "string" },
+                  "timestamp": { "type": "string", "format": "date-time" }
+                }
+              }
+            },
+            "nextStep": { "type": "string" },
+            "lastContacted": { "type": "string", "format": "date-time" },
+            "monetaryValue": { "type": "number" }
+          }
+        },
+        "compliance": {
+          "type": "object",
+          "properties": {
+            "verifiedByEU": { "type": "boolean" },
+            "collectedAt": { "type": "string", "format": "date-time" }
+          }
+        }
       },
-      "required": ["id", "name", "bornOn", "lastUpdated"]
+      "required": ["id", "userId", "placeId", "source", "crm", "compliance"]
     },
     "User": {
       "title": "User",

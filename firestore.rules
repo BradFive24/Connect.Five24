@@ -8,19 +8,12 @@ service cloud.firestore {
     // Collection: leads
     // Document ID: auto-generated
     // Fields:
-    //   - id: string (required)
-    //   - userId: string (required) - Owner of the lead
-    //   - name: string (required)
-    //   - placeId: string (optional)
-    //   - rating: number (optional)
-    //   - userRatingCount: number (optional)
-    //   - location: map { lat: number, lng: number } (required)
-    //   - formattedAddress: string (optional)
-    //   - monetaryValue: number (required, default 0)
-    //   - bornOn: string (required, ISO 8601)
-    //   - lastUpdated: string (required, ISO 8601)
-    //   - industry: string (optional)
-    //   - notes: string (optional)
+    //   - id: string
+    //   - userId: string
+    //   - placeId: string
+    //   - source: map (read-only from user perspective, but rules allow write on create)
+    //   - crm: map (editable by user)
+    //   - compliance: map
     //
     // Collection: users
     // Document ID: user email
@@ -48,11 +41,20 @@ service cloud.firestore {
     }
 
     function isValidLead(data) {
-      return data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
-             data.userId is string && data.userId.size() > 0 &&
-             data.monetaryValue is number && data.monetaryValue >= 0 &&
-             data.bornOn is string && data.lastUpdated is string &&
-             data.location is map && data.location.lat is number && data.location.lng is number;
+      return data.id is string &&
+             data.userId is string &&
+             data.placeId is string &&
+             data.source is map &&
+             data.source.name is string &&
+             data.source.formattedAddress is string &&
+             data.source.location is map &&
+             data.source.lastSynced is string &&
+             data.crm is map &&
+             data.crm.status in ['new', 'contacted', 'follow-up', 'closed'] &&
+             data.crm.interactionHistory is list &&
+             data.compliance is map &&
+             data.compliance.verifiedByEU is bool &&
+             data.compliance.collectedAt is string;
     }
 
     function isValidUser(data) {
@@ -63,7 +65,12 @@ service cloud.firestore {
     match /leads/{leadId} {
       allow read: if isAuthenticated() && (isOwner(resource.data.userId) || isAdmin());
       allow create: if isAuthenticated() && isValidLead(request.resource.data) && (isOwner(request.resource.data.userId) || isAdmin());
-      allow update: if isAuthenticated() && isValidLead(request.resource.data) && (isOwner(resource.data.userId) || isAdmin()) && (request.resource.data.userId == resource.data.userId);
+      allow update: if isAuthenticated() && 
+                     isValidLead(request.resource.data) && 
+                     (isOwner(resource.data.userId) || isAdmin()) && 
+                     (request.resource.data.userId == resource.data.userId) &&
+                     (request.resource.data.source == resource.data.source) &&
+                     (request.resource.data.placeId == resource.data.placeId);
       allow delete: if isAuthenticated() && (isOwner(resource.data.userId) || isAdmin());
     }
 
