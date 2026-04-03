@@ -23,6 +23,7 @@ const STATUS_COLUMNS: { id: LeadStatus; label: string; icon: any; color: string 
   { id: 'proposal', label: 'Proposal Sent', icon: DollarSign, color: 'text-amber-500' },
   { id: 'closed', label: 'Closed Won', icon: CheckCircle2, color: 'text-emerald-400' },
   { id: 'lost', label: 'Closed Lost', icon: XCircle, color: 'text-rose-500' },
+  { id: 'rejected', label: 'Rejected', icon: XCircle, color: 'text-zinc-500' },
 ];
 
 export const LeadPipeline: React.FC<LeadPipelineProps> = ({ leads, onUpdateStatus, onSelectLead }) => {
@@ -62,12 +63,6 @@ export const LeadPipeline: React.FC<LeadPipelineProps> = ({ leads, onUpdateStatu
                 </div>
 
                 <div className="space-y-2 mb-4">
-                  <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-mono">
-                    <DollarSign className="w-3 h-3 text-emerald-500" />
-                    <span className={lead.crm.monetaryValue > 0 ? "text-emerald-400" : ""}>
-                      ${lead.crm.monetaryValue.toLocaleString()}
-                    </span>
-                  </div>
                   <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-mono">
                     <Clock className="w-3 h-3 text-zinc-600" />
                     <span>{new Date(lead.compliance.collectedAt).toLocaleDateString()}</span>

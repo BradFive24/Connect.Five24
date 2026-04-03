@@ -60,7 +60,6 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
   const [status, setStatus] = useState<LeadStatus>('new');
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
-  const [monetaryValue, setMonetaryValue] = useState(0);
   const [nextStep, setNextStep] = useState('');
   const [verifiedByEU, setVerifiedByEU] = useState(false);
 
@@ -76,7 +75,6 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
       setNotes(lead.crm.notes || '');
       setStatus(lead.crm.status || 'new');
       setTags(lead.crm.tags || []);
-      setMonetaryValue(lead.crm.monetaryValue || 0);
       setNextStep(lead.crm.nextStep || '');
       setVerifiedByEU(lead.compliance.verifiedByEU || false);
     }
@@ -111,7 +109,6 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
           notes,
           status,
           tags,
-          monetaryValue,
           nextStep,
         },
         compliance: {
@@ -323,12 +320,12 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
                     <div className="space-y-4">
                       {/* Status Selector */}
                       <div className="grid grid-cols-4 gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800">
-                        {(['new', 'contacted', 'follow-up', 'closed'] as LeadStatus[]).map((s) => (
+                        {(['new', 'contacted', 'qualified', 'proposal', 'closed', 'lost', 'rejected'] as LeadStatus[]).map((s) => (
                           <button
                             key={s}
                             onClick={() => setStatus(s)}
                             className={cn(
-                              "py-1.5 text-[8px] font-bold uppercase tracking-widest rounded-lg transition-all",
+                              "py-1.5 text-[7px] font-bold uppercase tracking-widest rounded-lg transition-all",
                               status === s ? "bg-zinc-800 text-emerald-500 shadow-lg" : "text-zinc-600 hover:text-zinc-400"
                             )}
                           >

@@ -33,7 +33,7 @@
             "managerName": { "type": "string" },
             "email": { "type": "string" },
             "notes": { "type": "string" },
-            "status": { "type": "string", "enum": ["new", "contacted", "follow-up", "closed"] },
+            "status": { "type": "string", "enum": ["new", "contacted", "qualified", "proposal", "closed", "lost", "rejected"] },
             "tags": { "type": "array", "items": { "type": "string" } },
             "interactionHistory": {
               "type": "array",
@@ -48,8 +48,7 @@
               }
             },
             "nextStep": { "type": "string" },
-            "lastContacted": { "type": "string", "format": "date-time" },
-            "monetaryValue": { "type": "number" }
+            "lastContacted": { "type": "string", "format": "date-time" }
           }
         },
         "compliance": {

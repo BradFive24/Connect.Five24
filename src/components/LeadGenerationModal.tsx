@@ -229,8 +229,7 @@ export const LeadGenerationModal: React.FC<LeadGenerationModalProps> = ({
               content: 'Lead converted from search results.',
               timestamp: new Date().toISOString()
             }
-          ],
-          monetaryValue: 0
+          ]
         },
         compliance: {
           verifiedByEU: false,

@@ -195,7 +195,6 @@ function App() {
         status: 'new' as LeadStatus,
         tags: ["coffee"],
         interactionHistory: [],
-        monetaryValue: 5000
       },
       compliance: {
         verifiedByEU: false,
@@ -223,7 +222,6 @@ function App() {
         status: 'contacted' as LeadStatus,
         tags: ["auto"],
         interactionHistory: [],
-        monetaryValue: 12000
       },
       compliance: {
         verifiedByEU: true,
@@ -528,7 +526,6 @@ function App() {
               status: (data.status as LeadStatus) || 'new',
               tags: [],
               interactionHistory: [],
-              monetaryValue: data.monetaryValue || 0
             },
             compliance: {
               verifiedByEU: data.verifiedByEU || false,
@@ -1238,24 +1235,12 @@ function App() {
                         : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
                     )}
                   >
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-semibold text-sm truncate pr-2">{lead.source?.name || 'Unknown Business'}</h3>
-                      {lead.source?.rating && (
-                        <div className="flex items-center gap-1 text-[10px] bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400">
-                          <span>{lead.source.rating.toFixed(1)}</span>
-                          <span className="text-emerald-500">★</span>
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="font-semibold text-sm truncate pr-2">{lead.source?.name || 'Unknown Business'}</h3>
                         </div>
-                      )}
-                    </div>
                     
-                    <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                    <div className="grid grid-cols-1 gap-2 text-[10px] font-mono">
                       <div className="flex items-center gap-1 text-zinc-500">
-                        <DollarSign className="w-3 h-3" />
-                        <span className={lead.crm?.monetaryValue > 0 ? "text-emerald-400" : ""}>
-                          ${(lead.crm?.monetaryValue || 0).toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 text-zinc-500 justify-end">
                         <Clock className="w-3 h-3" />
                         <span className={isLeadExpired && !isVerified ? "text-rose-500" : "text-zinc-400"}>
                           {lead.compliance?.collectedAt ? new Date(lead.compliance.collectedAt).toLocaleDateString() : 'Unknown'}
@@ -1298,12 +1283,11 @@ function App() {
               </header>
 
               {/* Stats Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
                 {[
-                  { label: 'Total Pipeline', value: `$${displayLeads.reduce((acc, l) => acc + (l.crm?.monetaryValue || 0), 0).toLocaleString()}`, icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
                   { label: 'Active Leads', value: displayLeads.length, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
                   { label: 'Conversion Rate', value: `${displayLeads.length > 0 ? Math.round((displayLeads.filter(l => l.crm?.status === 'closed').length / displayLeads.length) * 100) : 0}%`, icon: Target, color: 'text-purple-500', bg: 'bg-purple-500/10' },
-                  { label: 'Avg. Lead Value', value: `$${displayLeads.length > 0 ? Math.round(displayLeads.reduce((acc, l) => acc + (l.crm?.monetaryValue || 0), 0) / displayLeads.length).toLocaleString() : 0}`, icon: BarChart3, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+                  { label: 'Verified Leads', value: displayLeads.filter(l => l.compliance?.verifiedByEU).length, icon: ShieldCheck, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
                 ].map((stat, i) => (
                   <motion.div
                     key={stat.label}
@@ -1347,7 +1331,6 @@ function App() {
                           </div>
                         </div>
                         <div className="flex items-center gap-4">
-                          <p className="text-sm font-mono text-emerald-500">${(lead.crm?.monetaryValue || 0).toLocaleString()}</p>
                           <ChevronRight className="w-4 h-4 text-zinc-700 group-hover:text-zinc-400 transition-colors" />
                         </div>
                       </motion.div>
@@ -1616,12 +1599,12 @@ function App() {
                 </div>
                 <div className="bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl flex items-center gap-3">
                   <div className="flex flex-col items-end">
-                    <span className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Pipeline Value</span>
+                    <span className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Total Leads</span>
                     <span className="text-sm font-mono text-emerald-500">
-                      ${displayLeads.reduce((acc, l) => acc + (l.crm?.monetaryValue || 0), 0).toLocaleString()}
+                      {displayLeads.length}
                     </span>
                   </div>
-                  <DollarSign className="w-5 h-5 text-emerald-500" />
+                  <Users className="w-5 h-5 text-emerald-500" />
                 </div>
               </div>
             </div>

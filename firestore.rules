@@ -50,7 +50,7 @@ service cloud.firestore {
              data.source.location is map &&
              data.source.lastSynced is string &&
              data.crm is map &&
-             data.crm.status in ['new', 'contacted', 'follow-up', 'closed'] &&
+             data.crm.status in ['new', 'contacted', 'qualified', 'proposal', 'closed', 'lost', 'rejected'] &&
              data.crm.interactionHistory is list &&
              data.compliance is map &&
              data.compliance.verifiedByEU is bool &&

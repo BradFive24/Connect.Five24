@@ -1,4 +1,4 @@
-export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal' | 'closed' | 'lost';
+export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal' | 'closed' | 'lost' | 'rejected';
 
 export interface Interaction {
   id: string;
@@ -33,7 +33,6 @@ export interface Lead {
     interactionHistory: Interaction[];
     nextStep?: string;
     lastContacted?: string;
-    monetaryValue: number;
   };
   compliance: {
     verifiedByEU: boolean;

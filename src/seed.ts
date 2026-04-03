@@ -22,7 +22,6 @@ const SEED_LEADS: Omit<Lead, 'id' | 'userId'>[] = [
       status: 'new',
       tags: ["coffee", "retail"],
       interactionHistory: [],
-      monetaryValue: 0
     },
     compliance: {
       verifiedByEU: false,
@@ -48,10 +47,41 @@ const SEED_LEADS: Omit<Lead, 'id' | 'userId'>[] = [
       status: 'new',
       tags: ["auto", "service"],
       interactionHistory: [],
-      monetaryValue: 0
     },
     compliance: {
       verifiedByEU: true,
+      collectedAt: new Date().toISOString()
+    }
+  },
+  {
+    placeId: "ChIJ_rejected_seed_lead",
+    source: {
+      name: "Old School Diner",
+      formattedAddress: "123 Main St, Anytown, USA",
+      phoneNumber: "(555) 012-3456",
+      rating: 3.2,
+      userRatingCount: 45,
+      location: { lat: 37.4, lng: -122.1 },
+      lastSynced: new Date().toISOString()
+    },
+    crm: {
+      ownerName: "Bob Burger",
+      managerName: "Linda Burger",
+      email: "bob@diner.com",
+      notes: "Not interested in digital marketing at this time.",
+      status: 'rejected',
+      tags: ["food", "diner"],
+      interactionHistory: [
+        {
+          id: "int-rejected-1",
+          type: 'call',
+          content: "Spoke with Bob, he's very traditional and doesn't want to change.",
+          timestamp: new Date().toISOString()
+        }
+      ],
+    },
+    compliance: {
+      verifiedByEU: false,
       collectedAt: new Date().toISOString()
     }
   }
