@@ -4,12 +4,30 @@ kind: "AppStack"
 apiVersion: "v1"
 
 # Environment variables for the application
-# Note: Sensitive secrets should be managed via the Firebase Console
 env:
   - name: NODE_ENV
     value: production
   - name: APP_URL
     value: "https://connect.five24creativestudio.com"
+  # Sensitive secrets — values MUST be created in Firebase Secret Manager before deploying.
+  # Secret names must match exactly. Create them with:
+  #   firebase apphosting:secrets:set GOOGLE_CLIENT_ID
+  #   firebase apphosting:secrets:set GOOGLE_CLIENT_SECRET
+  #   firebase apphosting:secrets:set GEMINI_API_KEY
+  #   firebase apphosting:secrets:set GOOGLE_MAPS_PLATFORM_KEY
+  #   firebase apphosting:secrets:set SESSION_SECRET
+  # If a secret is missing, the backend will fail to start.
+  # Verify all secrets exist before triggering a new deployment.
+  - variable: GOOGLE_CLIENT_ID
+    secret: GOOGLE_CLIENT_ID
+  - variable: GOOGLE_CLIENT_SECRET
+    secret: GOOGLE_CLIENT_SECRET
+  - variable: GEMINI_API_KEY
+    secret: GEMINI_API_KEY
+  - variable: GOOGLE_MAPS_PLATFORM_KEY
+    secret: GOOGLE_MAPS_PLATFORM_KEY
+  - variable: SESSION_SECRET
+    secret: SESSION_SECRET
 
 # Build configuration
 # Firebase App Hosting automatically detects Vite and Express

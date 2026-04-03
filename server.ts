@@ -106,11 +106,18 @@ async function startServer() {
     next();
   });
 
+  if (!process.env.SESSION_SECRET) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('SESSION_SECRET environment variable must be set in production. Add it as a Firebase Secret Manager secret.');
+    }
+    console.warn('WARNING: SESSION_SECRET is not set. Using insecure default key — only acceptable in local development.');
+  }
+  const sessionKey = process.env.SESSION_SECRET || 'five24-connect-secret-key-dev-only';
   app.use(cookieSession({
     name: 'five24-session',
-    keys: ['five24-connect-secret-key-v1'],
+    keys: [sessionKey],
     maxAge: 24 * 60 * 60 * 1000,
-    secure: true,
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'none',
     httpOnly: true,
     signed: true,
@@ -165,9 +172,14 @@ async function startServer() {
   // OAuth Routes
   // Dynamic URL helper
   const getAppUrl = (req: express.Request) => {
-    // In AI Studio, we often want the dynamic URL for previews to work correctly
-    // especially for the redirect_uri to match the current environment.
-    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    // x-forwarded-proto may be a comma-separated list when behind multiple proxies (e.g. "https,http").
+    // Take the first value (the outermost/client-facing protocol).
+    const rawProto = req.headers['x-forwarded-proto'];
+    // When behind multiple proxies the header may be an array (Express splits repeated headers)
+    // or a comma-separated string. Take the first value in either case.
+    const protocol = Array.isArray(rawProto)
+      ? rawProto[0].trim()
+      : (rawProto?.trim() || 'https').split(',')[0].trim();
     const host = req.headers.host;
     const dynamicUrl = `${protocol}://${host}`;
     
@@ -243,7 +255,7 @@ async function startServer() {
                 <p style="color: #71717a;">Closing link...</p>
                 <script>
                   if (window.opener) {
-                    window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, '*');
+                    window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, '${currentAppUrl}');
                     setTimeout(() => window.close(), 100);
                   } else {
                     window.location.href = '/';
@@ -259,16 +271,14 @@ async function startServer() {
       }
     } catch (error: any) {
       console.error('[AUTH] Callback error:', error);
-      const errorDetail = error.response?.data || error.message || 'Unknown error';
       
-      // Provide a more helpful error page
+      // Provide a helpful error page — error details are intentionally omitted from the
+      // HTML response and only logged server-side to prevent XSS via exception data.
       res.status(500).send(`
         <html>
           <body style="background: #09090b; color: #ef4444; font-family: sans-serif; padding: 40px;">
             <h1>Authentication Failed</h1>
-            <pre style="background: #18181b; padding: 20px; border-radius: 8px; color: #f87171; overflow: auto;">
-${JSON.stringify(errorDetail, null, 2)}
-            </pre>
+            <p style="color: #f87171;">An error occurred during authentication. Check the server logs for details.</p>
             <div style="margin-top: 20px; color: #71717a;">
               <p>Common causes:</p>
               <ul style="text-align: left; display: inline-block;">
@@ -280,7 +290,7 @@ ${JSON.stringify(errorDetail, null, 2)}
             <button onclick="window.close()" style="margin-top: 20px; background: #27272a; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer;">Close Window</button>
             <script>
               if (window.opener) {
-                window.opener.postMessage({ type: 'OAUTH_AUTH_ERROR', error: ${JSON.stringify(errorDetail)} }, '*');
+                window.opener.postMessage({ type: 'OAUTH_AUTH_ERROR' }, '${currentAppUrl}');
               }
             </script>
           </body>
