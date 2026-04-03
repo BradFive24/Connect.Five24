@@ -5,9 +5,9 @@ apiVersion: "v1"
 
 # Environment variables for the application
 env:
-  - name: NODE_ENV
+  - variable: NODE_ENV
     value: production
-  - name: APP_URL
+  - variable: APP_URL
     value: "https://connect.five24creativestudio.com"
   # Sensitive secrets — values MUST be created in Firebase Secret Manager before deploying.
   # Secret names must match exactly. Create them with:
