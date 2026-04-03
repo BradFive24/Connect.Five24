@@ -36,6 +36,7 @@ interface CoachPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onUpdateLead?: (lead: Lead) => void;
+  userGeminiKey?: string;
 }
 
 interface NEPQPrompts {
@@ -44,7 +45,7 @@ interface NEPQPrompts {
   consequence: string;
 }
 
-export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, onUpdateLead }) => {
+export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, onUpdateLead, userGeminiKey }) => {
   const [prompts, setPrompts] = useState<NEPQPrompts | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -80,6 +81,21 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
       setVerifiedByEU(lead.compliance.verifiedByEU || false);
     }
   }, [lead]);
+
+  const handleToggleVerification = async () => {
+    if (!lead || !onUpdateLead) return;
+    const newValue = !verifiedByEU;
+    setVerifiedByEU(newValue);
+    
+    // Save immediately to Firestore
+    onUpdateLead({
+      ...lead,
+      compliance: {
+        ...lead.compliance,
+        verifiedByEU: newValue
+      }
+    });
+  };
 
   const handleSaveCRM = async () => {
     if (!lead || !onUpdateLead) return;
@@ -155,7 +171,7 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
         setInferredIndustry(industry);
       }
 
-      const data = await getCoachPrompts(industry || 'General', lead.source.name);
+      const data = await getCoachPrompts(industry || 'General', lead.source.name, userGeminiKey);
       setPrompts(data);
     } catch (err) {
       console.error('Failed to fetch coach prompts:', err);
@@ -489,7 +505,7 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
                           <p className="text-[10px] text-zinc-500">Exempt from 28-day compliance purge.</p>
                         </div>
                         <button
-                          onClick={() => setVerifiedByEU(!verifiedByEU)}
+                          onClick={handleToggleVerification}
                           className={cn(
                             "w-12 h-6 rounded-full transition-all relative",
                             verifiedByEU ? "bg-emerald-600" : "bg-zinc-800"

@@ -16,6 +16,8 @@ import { signIn, signOut } from './firebase';
 import { CoachPanel } from './components/CoachPanel';
 import { LeadGenerationModal } from './components/LeadGenerationModal';
 import { LeadPipeline } from './components/LeadPipeline';
+import { SettingsModal } from './components/SettingsModal';
+import { Settings } from 'lucide-react';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -95,6 +97,30 @@ const GOOGLE_MAPS_API_KEY =
 
 const DEBUG_MODE = true;
 
+const getLocalGeminiKey = () => localStorage.getItem('GEMINI_API_KEY') || '';
+const getLocalMapsKey = () => localStorage.getItem('GOOGLE_MAPS_API_KEY') || '';
+
+// Global error interception for Google Maps
+if (typeof window !== 'undefined') {
+  const originalError = console.error;
+  console.error = (...args) => {
+    const message = args.map(arg => {
+      if (typeof arg === 'string') return arg;
+      try { return JSON.stringify(arg); } catch (e) { return String(arg); }
+    }).join(' ');
+    
+    if (message.includes('ApiTargetBlockedMapError') || message.includes('gm_authFailure')) {
+      (window as any).__google_maps_error = true;
+    }
+    originalError.apply(console, args);
+  };
+
+  (window as any).gm_authFailure = () => {
+    console.error('Google Maps authentication failed (gm_authFailure)');
+    (window as any).__google_maps_error = true;
+  };
+}
+
 export default function AppWrapper() {
   return (
     <ErrorBoundary>
@@ -135,6 +161,11 @@ function App() {
   const [simulationMode, setSimulationMode] = useState(false);
   const [isGeneratingLeads, setIsGeneratingLeads] = useState(false);
   const [viewMode, setViewMode] = useState<'radar' | 'pipeline'>('radar');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [userGeminiKey, setUserGeminiKey] = useState(getLocalGeminiKey());
+  const [userMapsKey, setUserMapsKey] = useState(getLocalMapsKey());
+
+  const effectiveMapsKey = userMapsKey || GOOGLE_MAPS_API_KEY;
   
   const displayLeads = (DEBUG_MODE && leads.length === 0) ? [
     {
@@ -258,7 +289,7 @@ function App() {
 
   useEffect(() => {
     console.log('Sales Radar Initializing...');
-    console.log('API Key Status:', GOOGLE_MAPS_API_KEY ? `PRESENT (ends in ...${GOOGLE_MAPS_API_KEY.slice(-4)})` : 'MISSING');
+    console.log('API Key Status:', effectiveMapsKey ? `PRESENT (ends in ...${effectiveMapsKey.slice(-4)})` : 'MISSING');
     
     if (DEBUG_MODE) {
       setAuthStatus({ authenticated: true, onboardingCompleted: true, hasAccessToken: true });
@@ -269,7 +300,7 @@ function App() {
     
     // Only validate once per session
     if (!sessionStorage.getItem('gemini_validated')) {
-      validateGeminiConnection().then(success => {
+      validateGeminiConnection(userGeminiKey).then(success => {
         if (success) sessionStorage.setItem('gemini_validated', 'true');
       });
     }
@@ -279,8 +310,8 @@ function App() {
       setIsAuthReady(true);
     });
     
-    if (!GOOGLE_MAPS_API_KEY) {
-      setMapError('ApiTargetBlockedMapError: Google Maps API Key is missing. Please add it to your environment variables.');
+    if (!effectiveMapsKey) {
+      setMapError('ApiTargetBlockedMapError: Google Maps API Key is missing. Please add it in Connection Settings.');
       setSimulationMode(true);
     }
 
@@ -307,6 +338,12 @@ function App() {
       setMapError(errorMsg);
       setSimulationMode(true); // Auto-switch to simulation immediately
     };
+
+    // Check for global error flag
+    if ((window as any).__google_maps_error) {
+      setMapError('ApiTargetBlockedMapError: Maps JavaScript API is not authorized for this key.');
+      setSimulationMode(true);
+    }
 
     // Global error listener for script loading issues
     const handleGlobalError = (event: ErrorEvent) => {
@@ -918,9 +955,22 @@ function App() {
     }
   }, [isAuthReady, purgeOldLeads]);
 
+  const handleSaveSettings = (gemini: string, maps: string) => {
+    localStorage.setItem('GEMINI_API_KEY', gemini);
+    localStorage.setItem('GOOGLE_MAPS_API_KEY', maps);
+    setUserGeminiKey(gemini);
+    setUserMapsKey(maps);
+    
+    // If we just added a maps key, try to disable simulation mode
+    if (maps) {
+      setMapError(null);
+      setSimulationMode(false);
+    }
+  };
+
   return (
     <APIProvider 
-      apiKey={GOOGLE_MAPS_API_KEY} 
+      apiKey={effectiveMapsKey} 
       version="weekly"
       onLoad={() => {
         console.log('Maps API Loaded Successfully');
@@ -936,6 +986,12 @@ function App() {
               <Radar className="w-6 h-6 text-emerald-500 animate-pulse" />
               <h1 className="text-xl font-bold tracking-tight">Five24 Connect</h1>
             </div>
+            <button 
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-500 hover:text-zinc-300"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
           </div>
           
           <div className="flex flex-col gap-4">
@@ -978,62 +1034,67 @@ function App() {
             </button>
           </div>
           
-          {displayLeads.map((lead) => (
-            <motion.div
-              key={lead.id}
-              layoutId={lead.id}
-              onClick={() => setSelectedLead(lead)}
-              className={cn(
-                "p-4 rounded-xl border cursor-pointer transition-all duration-200 group",
-                selectedLead?.id === lead.id 
-                  ? "bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.1)]" 
-                  : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
-              )}
-            >
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="font-semibold text-sm truncate pr-2">{lead.source?.name || 'Unknown Business'}</h3>
-                {lead.source?.rating && (
-                  <div className="flex items-center gap-1 text-[10px] bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400">
-                    <span>{lead.source.rating.toFixed(1)}</span>
-                    <span className="text-emerald-500">★</span>
-                  </div>
+          {displayLeads.map((lead) => {
+            const isLeadExpired = lead.compliance?.collectedAt ? isExpired(lead.compliance.collectedAt) : false;
+            const isVerified = lead.compliance?.verifiedByEU || false;
+            
+            return (
+              <motion.div
+                key={lead.id}
+                layoutId={lead.id}
+                onClick={() => setSelectedLead(lead)}
+                className={cn(
+                  "p-4 rounded-xl border cursor-pointer transition-all duration-200 group",
+                  selectedLead?.id === lead.id 
+                    ? "bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.1)]" 
+                    : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
                 )}
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-                <div className="flex items-center gap-1 text-zinc-500">
-                  <DollarSign className="w-3 h-3" />
-                  <span className={lead.crm.monetaryValue > 0 ? "text-emerald-400" : ""}>
-                    ${lead.crm.monetaryValue.toLocaleString()}
-                  </span>
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="font-semibold text-sm truncate pr-2">{lead.source?.name || 'Unknown Business'}</h3>
+                  {lead.source?.rating && (
+                    <div className="flex items-center gap-1 text-[10px] bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400">
+                      <span>{lead.source.rating.toFixed(1)}</span>
+                      <span className="text-emerald-500">★</span>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-1 text-zinc-500 justify-end">
-                  <Clock className="w-3 h-3" />
-                  <span className={isExpired(lead.compliance.collectedAt) && !lead.compliance.verifiedByEU ? "text-rose-500" : "text-zinc-400"}>
-                    {new Date(lead.compliance.collectedAt).toLocaleDateString()}
-                  </span>
-                </div>
-              </div>
-              
-              <div className="mt-2 flex items-center justify-between">
-                <span className={cn(
-                  "text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded",
-                  lead.crm.status === 'new' ? "bg-blue-500/10 text-blue-500" :
-                  lead.crm.status === 'contacted' ? "bg-amber-500/10 text-amber-500" :
-                  lead.crm.status === 'qualified' ? "bg-purple-500/10 text-purple-500" :
-                  "bg-emerald-500/10 text-emerald-500"
-                )}>
-                  {lead.crm.status}
-                </span>
-                {isExpired(lead.compliance.collectedAt) && !lead.compliance.verifiedByEU && (
-                  <div className="flex items-center gap-1 text-[9px] text-rose-500 uppercase font-bold tracking-tighter">
-                    <RefreshCw className="w-2.5 h-2.5 animate-spin-slow" />
-                    Purge
+                
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                  <div className="flex items-center gap-1 text-zinc-500">
+                    <DollarSign className="w-3 h-3" />
+                    <span className={lead.crm?.monetaryValue > 0 ? "text-emerald-400" : ""}>
+                      ${(lead.crm?.monetaryValue || 0).toLocaleString()}
+                    </span>
                   </div>
-                )}
-              </div>
-            </motion.div>
-          ))}
+                  <div className="flex items-center gap-1 text-zinc-500 justify-end">
+                    <Clock className="w-3 h-3" />
+                    <span className={isLeadExpired && !isVerified ? "text-rose-500" : "text-zinc-400"}>
+                      {lead.compliance?.collectedAt ? new Date(lead.compliance.collectedAt).toLocaleDateString() : 'Unknown'}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="mt-2 flex items-center justify-between">
+                  <span className={cn(
+                    "text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded",
+                    lead.crm?.status === 'new' ? "bg-blue-500/10 text-blue-500" :
+                    lead.crm?.status === 'contacted' ? "bg-amber-500/10 text-amber-500" :
+                    lead.crm?.status === 'qualified' ? "bg-purple-500/10 text-purple-500" :
+                    "bg-emerald-500/10 text-emerald-500"
+                  )}>
+                    {lead.crm?.status || 'new'}
+                  </span>
+                  {isLeadExpired && !isVerified && (
+                    <div className="flex items-center gap-1 text-[9px] text-rose-500 uppercase font-bold tracking-tighter">
+                      <RefreshCw className="w-2.5 h-2.5 animate-spin-slow" />
+                      Purge
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       </div>
 
@@ -1078,7 +1139,7 @@ function App() {
                     <div className={cn(
                       "w-4 h-4 rounded-full border-2 border-zinc-950 shadow-[0_0_10px_rgba(16,185,129,0.5)] transition-transform group-hover:scale-125",
                       selectedLead?.id === lead.id ? "bg-emerald-500 scale-125" : "bg-zinc-800",
-                      isExpired(lead.compliance?.collectedAt || new Date().toISOString()) && !lead.compliance?.verifiedByEU ? "bg-rose-500" : ""
+                      (lead.compliance?.collectedAt ? isExpired(lead.compliance.collectedAt) : false) && !lead.compliance?.verifiedByEU ? "bg-rose-500" : ""
                     )} />
                     <div className="absolute top-6 left-1/2 -translate-x-1/2 whitespace-nowrap bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 px-2 py-1 rounded text-[10px] font-mono opacity-0 group-hover:opacity-100 transition-opacity">
                       {lead.source?.name || 'Unknown'}
@@ -1099,7 +1160,7 @@ function App() {
                   </div>
                 </div>
               </div>
-            ) : (!GOOGLE_MAPS_API_KEY || (mapError && !simulationMode)) ? (
+            ) : (!effectiveMapsKey || (mapError && !simulationMode)) ? (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-zinc-950 p-10 text-center">
                 <div className="max-w-md bg-zinc-900 border border-zinc-800 p-8 rounded-2xl shadow-2xl">
                   <MapPin className="w-12 h-12 text-rose-500 mx-auto mb-4 animate-bounce" />
@@ -1154,7 +1215,7 @@ function App() {
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : ((window as any).google?.maps) ? (
               <Map
                 defaultCenter={radarLocation}
                 defaultZoom={13}
@@ -1169,28 +1230,47 @@ function App() {
                   { featureType: "water", elementType: "geometry", stylers: [{ color: "#09090b" }] },
                 ]}
               >
-                {displayLeads.map((lead) => (
-                  <AdvancedMarker
-                    key={lead.id}
-                    position={lead.source.location}
-                    onClick={() => handleSelectLead(lead)}
-                  >
-                    <div className={cn(
-                      "relative flex items-center justify-center transition-transform hover:scale-110",
-                      selectedLead?.id === lead.id ? "scale-125" : ""
-                    )}>
+                {displayLeads.map((lead) => {
+                  if (!lead.source?.location) return null;
+                  
+                  // Extra safety check for AdvancedMarker requirements
+                  if (!(window as any).google?.maps?.marker) {
+                    return null;
+                  }
+                  
+                  const isLeadExpired = lead.compliance?.collectedAt ? isExpired(lead.compliance.collectedAt) : false;
+                  const isVerified = lead.compliance?.verifiedByEU || false;
+
+                  return (
+                    <AdvancedMarker
+                      key={lead.id}
+                      position={lead.source.location}
+                      onClick={() => handleSelectLead(lead)}
+                    >
                       <div className={cn(
-                        "absolute w-8 h-8 rounded-full animate-ping opacity-20",
-                        isExpired(lead.compliance.collectedAt) && !lead.compliance.verifiedByEU ? "bg-rose-500" : "bg-emerald-500"
-                      )} />
-                      <div className={cn(
-                        "w-4 h-4 rounded-full border-2 border-zinc-950 shadow-lg",
-                        isExpired(lead.compliance.collectedAt) && !lead.compliance.verifiedByEU ? "bg-rose-500" : "bg-emerald-500"
-                      )} />
-                    </div>
-                  </AdvancedMarker>
-                ))}
+                        "relative flex items-center justify-center transition-transform hover:scale-110",
+                        selectedLead?.id === lead.id ? "scale-125" : ""
+                      )}>
+                        <div className={cn(
+                          "absolute w-8 h-8 rounded-full animate-ping opacity-20",
+                          isLeadExpired && !isVerified ? "bg-rose-500" : "bg-emerald-500"
+                        )} />
+                        <div className={cn(
+                          "w-4 h-4 rounded-full border-2 border-zinc-950 shadow-lg",
+                          isLeadExpired && !isVerified ? "bg-rose-500" : "bg-emerald-500"
+                        )} />
+                      </div>
+                    </AdvancedMarker>
+                  );
+                })}
               </Map>
+            ) : (
+              <div className="flex-1 flex items-center justify-center bg-zinc-950">
+                <div className="text-center">
+                  <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mx-auto mb-4" />
+                  <p className="text-zinc-500 text-xs uppercase tracking-widest font-bold">Initializing Radar...</p>
+                </div>
+              </div>
             )}
 
             {/* Overlay Controls */}
@@ -1241,6 +1321,7 @@ function App() {
         onClose={() => setIsCoachOpen(false)}
         lead={selectedLead}
         onUpdateLead={handleUpdateLead}
+        userGeminiKey={userGeminiKey}
       />
 
       <LeadGenerationModal 
@@ -1249,6 +1330,15 @@ function App() {
         onLeadConverted={handleLeadConverted}
         isSimulationMode={simulationMode}
         mapError={mapError}
+        userGeminiKey={userGeminiKey}
+      />
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        geminiKey={userGeminiKey}
+        mapsKey={userMapsKey}
+        onSave={handleSaveSettings}
       />
 
       <style>{`

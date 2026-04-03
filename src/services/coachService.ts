@@ -4,10 +4,10 @@ import { GoogleGenAI } from "@google/genai";
  * Validates the Gemini API connection.
  * Logs success or failure to the console.
  */
-export async function validateGeminiConnection() {
-  const apiKey = process.env.GEMINI_API_KEY;
+export async function validateGeminiConnection(userApiKey?: string) {
+  const apiKey = userApiKey || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    console.error("GEMINI_API_KEY is missing from the environment.");
+    console.error("GEMINI_API_KEY is missing.");
     return false;
   }
 
@@ -41,8 +41,8 @@ export async function validateGeminiConnection() {
   }
 }
 
-export async function getCoachPrompts(industry: string, leadName: string) {
-  const apiKey = process.env.GEMINI_API_KEY;
+export async function getCoachPrompts(industry: string, leadName: string, userApiKey?: string) {
+  const apiKey = userApiKey || process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.error("GEMINI_API_KEY is missing. Falling back to default prompts.");
     return getDefaultPrompts();

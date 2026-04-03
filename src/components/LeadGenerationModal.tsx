@@ -28,6 +28,7 @@ interface LeadGenerationModalProps {
   onLeadConverted: (lead: Lead) => void;
   isSimulationMode?: boolean;
   mapError?: string | null;
+  userGeminiKey?: string;
 }
 
 export const LeadGenerationModal: React.FC<LeadGenerationModalProps> = ({ 
@@ -35,7 +36,8 @@ export const LeadGenerationModal: React.FC<LeadGenerationModalProps> = ({
   onClose, 
   onLeadConverted,
   isSimulationMode = false,
-  mapError = null
+  mapError = null,
+  userGeminiKey = ''
 }) => {
   const map = useMap();
   const [prompt, setPrompt] = useState('');
@@ -66,7 +68,7 @@ export const LeadGenerationModal: React.FC<LeadGenerationModalProps> = ({
     setResults([]);
 
     // Fallback to Gemini if Map/Places is not available or in simulation mode
-    if (!map || typeof google === 'undefined' || isSimulationMode || mapError) {
+    if (!map || typeof google === 'undefined' || !(google as any).maps?.places || isSimulationMode || mapError) {
       console.warn("Maps API not available or in simulation mode, falling back to Gemini AI");
       await handleGenerateAI();
       return;
@@ -130,8 +132,15 @@ export const LeadGenerationModal: React.FC<LeadGenerationModalProps> = ({
   };
 
   const handleGenerateAI = async () => {
+    const apiKey = userGeminiKey || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("No Gemini API key available. Please add it in Connection Settings.");
+      setIsGenerating(false);
+      return;
+    }
+
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Generate 5 realistic business leads for a sales person. 
