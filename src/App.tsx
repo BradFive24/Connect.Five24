@@ -5,7 +5,7 @@ import {
   Radar, Target, MessageSquare, Plus, RefreshCw, DollarSign, Clock, MapPin, 
   Loader2, LogIn, Sparkles, AlertCircle, Key, CheckCircle2, ShieldCheck, 
   Lock, HelpCircle, Globe, UserCheck, Brain, ExternalLink, Settings,
-  LayoutDashboard, Users, BarChart3, ChevronRight, Bell
+  LayoutDashboard, Users, BarChart3, ChevronRight, Bell, LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
@@ -1176,6 +1176,15 @@ function App() {
                 Settings
               </div>
             </button>
+            <button 
+              onClick={() => signOut()}
+              className="p-3 text-zinc-500 hover:text-rose-400 transition-colors group relative"
+            >
+              <LogOut className="w-6 h-6" />
+              <div className="absolute left-full ml-4 px-2 py-1 bg-zinc-800 text-white text-[10px] font-bold uppercase tracking-widest rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+                Logout
+              </div>
+            </button>
             <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden">
               <div className="w-full h-full bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex items-center justify-center text-[10px] font-bold text-emerald-500">
                 BC
@@ -1661,6 +1670,10 @@ function App() {
         mapsKey={userMapsKey}
         simulationMode={simulationMode}
         onSave={handleSaveSettings}
+        onLogout={() => {
+          signOut();
+          setIsSettingsOpen(false);
+        }}
       />
 
       <style>{`

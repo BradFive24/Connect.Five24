@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Key, MapPin, Save, AlertCircle, CheckCircle2, Radar } from 'lucide-react';
+import { X, Key, MapPin, Save, AlertCircle, CheckCircle2, Radar, LogOut } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -16,9 +16,10 @@ interface SettingsModalProps {
   mapsKey: string;
   simulationMode: boolean;
   onSave: (geminiKey: string, mapsKey: string, simulationMode: boolean) => void;
+  onLogout?: () => void;
 }
 
-export function SettingsModal({ isOpen, onClose, geminiKey, mapsKey, simulationMode, onSave }: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose, geminiKey, mapsKey, simulationMode, onSave, onLogout }: SettingsModalProps) {
   const [localGeminiKey, setLocalGeminiKey] = useState(geminiKey);
   const [localMapsKey, setLocalMapsKey] = useState(mapsKey);
   const [localSimulationMode, setLocalSimulationMode] = useState(simulationMode);
@@ -109,7 +110,7 @@ export function SettingsModal({ isOpen, onClose, geminiKey, mapsKey, simulationM
                   </p>
                 </div>
 
-                <div className="pt-4 border-t border-zinc-800">
+                <div className="pt-4 border-t border-zinc-800 space-y-4">
                   <button
                     onClick={() => setLocalSimulationMode(!localSimulationMode)}
                     className="w-full flex items-center justify-between p-4 bg-zinc-950 border border-zinc-800 rounded-2xl hover:border-zinc-700 transition-colors group"
@@ -139,6 +140,21 @@ export function SettingsModal({ isOpen, onClose, geminiKey, mapsKey, simulationM
                       />
                     </div>
                   </button>
+
+                  {onLogout && (
+                    <button
+                      onClick={onLogout}
+                      className="w-full flex items-center gap-3 p-4 bg-rose-500/5 border border-rose-500/10 rounded-2xl hover:bg-rose-500/10 transition-colors group"
+                    >
+                      <div className="p-2 bg-rose-500/10 rounded-xl group-hover:bg-rose-500/20 transition-colors">
+                        <LogOut className="w-4 h-4 text-rose-500" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-xs font-bold text-rose-500 uppercase tracking-widest">Logout</p>
+                        <p className="text-[9px] text-rose-500/60">Sign out of your account</p>
+                      </div>
+                    </button>
+                  )}
                 </div>
 
                 <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl">
