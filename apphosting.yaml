@@ -1,5 +1,6 @@
 # Firebase App Hosting configuration
 # See: https://firebase.google.com/docs/app-hosting/configure
+# Force Sync: 2026-04-03T16:50:00Z
 kind: "AppStack"
 apiVersion: "v1"
 

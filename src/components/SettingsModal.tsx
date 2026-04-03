@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Key, MapPin, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { X, Key, MapPin, Save, AlertCircle, CheckCircle2, Radar } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -14,21 +14,24 @@ interface SettingsModalProps {
   onClose: () => void;
   geminiKey: string;
   mapsKey: string;
-  onSave: (geminiKey: string, mapsKey: string) => void;
+  simulationMode: boolean;
+  onSave: (geminiKey: string, mapsKey: string, simulationMode: boolean) => void;
 }
 
-export function SettingsModal({ isOpen, onClose, geminiKey, mapsKey, onSave }: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose, geminiKey, mapsKey, simulationMode, onSave }: SettingsModalProps) {
   const [localGeminiKey, setLocalGeminiKey] = useState(geminiKey);
   const [localMapsKey, setLocalMapsKey] = useState(mapsKey);
+  const [localSimulationMode, setLocalSimulationMode] = useState(simulationMode);
   const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
     setLocalGeminiKey(geminiKey);
     setLocalMapsKey(mapsKey);
-  }, [geminiKey, mapsKey]);
+    setLocalSimulationMode(simulationMode);
+  }, [geminiKey, mapsKey, simulationMode]);
 
   const handleSave = () => {
-    onSave(localGeminiKey, localMapsKey);
+    onSave(localGeminiKey, localMapsKey, localSimulationMode);
     setIsSaved(true);
     setTimeout(() => {
       setIsSaved(false);
@@ -101,8 +104,41 @@ export function SettingsModal({ isOpen, onClose, geminiKey, mapsKey, onSave }: S
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500/50 transition-colors"
                   />
                   <p className="text-[9px] text-zinc-600 leading-relaxed">
-                    Used for real-time radar tracking and local business search.
+                    Used for real-time radar tracking and local business search. 
+                    <span className="text-emerald-500/80 block mt-1">Requires "Maps JavaScript API" and "Places API" to be enabled and unrestricted.</span>
                   </p>
+                </div>
+
+                <div className="pt-4 border-t border-zinc-800">
+                  <button
+                    onClick={() => setLocalSimulationMode(!localSimulationMode)}
+                    className="w-full flex items-center justify-between p-4 bg-zinc-950 border border-zinc-800 rounded-2xl hover:border-zinc-700 transition-colors group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "p-2 rounded-xl transition-colors",
+                        localSimulationMode ? "bg-emerald-500/10" : "bg-zinc-800"
+                      )}>
+                        <Radar className={cn(
+                          "w-4 h-4 transition-colors",
+                          localSimulationMode ? "text-emerald-500" : "text-zinc-500"
+                        )} />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-xs font-bold text-zinc-100 uppercase tracking-widest">Simulation Mode</p>
+                        <p className="text-[9px] text-zinc-500">Run radar without Google Maps API</p>
+                      </div>
+                    </div>
+                    <div className={cn(
+                      "w-10 h-5 rounded-full relative transition-colors",
+                      localSimulationMode ? "bg-emerald-500" : "bg-zinc-800"
+                    )}>
+                      <motion.div
+                        animate={{ x: localSimulationMode ? 20 : 2 }}
+                        className="absolute top-1 w-3 h-3 bg-white rounded-full shadow-sm"
+                      />
+                    </div>
+                  </button>
                 </div>
 
                 <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl">

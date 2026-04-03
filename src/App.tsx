@@ -1,6 +1,7 @@
+// Force Sync: 2026-04-03T16:51:00Z
 import React, { useState, useEffect, useCallback } from 'react';
 import { APIProvider, Map, AdvancedMarker, Pin, InfoWindow, useMap } from '@vis.gl/react-google-maps';
-import { Radar, Target, MessageSquare, Plus, RefreshCw, DollarSign, Clock, MapPin, Loader2, LogIn, Sparkles, AlertCircle } from 'lucide-react';
+import { Radar, Target, MessageSquare, Plus, RefreshCw, DollarSign, Clock, MapPin, Loader2, LogIn, Sparkles, AlertCircle, Key, CheckCircle2, ShieldCheck, Lock, HelpCircle, Globe, UserCheck, Brain, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
 import { clsx } from 'clsx';
@@ -160,7 +161,7 @@ function App() {
   const [mapError, setMapError] = useState<string | null>(null);
   const [simulationMode, setSimulationMode] = useState(false);
   const [isGeneratingLeads, setIsGeneratingLeads] = useState(false);
-  const [viewMode, setViewMode] = useState<'radar' | 'pipeline'>('radar');
+  const [viewMode, setViewMode] = useState<'radar' | 'pipeline'>('pipeline');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [userGeminiKey, setUserGeminiKey] = useState(getLocalGeminiKey());
   const [userMapsKey, setUserMapsKey] = useState(getLocalMapsKey());
@@ -333,10 +334,10 @@ function App() {
 
     // Standard Google Maps auth failure handler
     (window as any).gm_authFailure = () => {
-      const errorMsg = 'ApiTargetBlockedMapError: Authentication failed. Please check your API key restrictions in Google Cloud Console.';
+      const errorMsg = 'ApiTargetBlockedMapError: Google Maps authentication failed. This usually means your API Key is restricted and doesn\'t allow the "Maps JavaScript API".';
       console.error('Google Maps authentication failed (gm_authFailure)');
       setMapError(errorMsg);
-      setSimulationMode(true); // Auto-switch to simulation immediately
+      setSimulationMode(false); // Don't auto-switch to simulation, show the error screen instead for better guidance
     };
 
     // Check for global error flag
@@ -689,93 +690,144 @@ function App() {
     );
   }
 
-  // Login Screen (Initial)
+  // Landing Page (Login)
   if (!authStatus?.authenticated && !hasBeenAuthenticated && !DEBUG_MODE) {
-    const isFirebaseAuthed = !!firebaseUser;
-    
     return (
-      <div className="flex items-center justify-center h-screen bg-zinc-950 text-zinc-100 font-sans p-6">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center max-w-md w-full bg-zinc-900 border border-zinc-800 p-12 rounded-[2.5rem] shadow-2xl"
-        >
-          <div className="w-20 h-20 bg-emerald-500/10 rounded-3xl flex items-center justify-center mx-auto mb-8">
-            <Radar className="w-10 h-10 text-emerald-500" />
-          </div>
-          <h1 className="text-4xl font-black mb-4 tracking-tighter uppercase italic">Five24 Connect</h1>
-          <p className="text-zinc-500 mb-12 text-sm font-medium leading-relaxed">
-            {isFirebaseAuthed 
-              ? "Firebase link established. Now connect your Google account to access the radar."
-              : "The ultimate radar for high-stakes lead generation. Sign in to get started."}
-          </p>
-          
-          <button 
-            onClick={handleConnectAccount}
-            className="w-full py-5 bg-white text-zinc-950 rounded-2xl font-black text-lg hover:bg-zinc-200 transition-all flex items-center justify-center gap-4 shadow-xl shadow-white/5 group"
-          >
-            <img src="https://www.google.com/favicon.ico" className="w-6 h-6 group-hover:scale-110 transition-transform" alt="Google" />
-            {isFirebaseAuthed ? "CONNECT GOOGLE ACCOUNT" : "SIGN IN WITH GOOGLE"}
-          </button>
-          
-          <div className="mt-6 flex flex-col gap-4">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
-              Trouble signing in?
-            </p>
-            <button
-              onClick={() => window.open(window.location.href, '_blank')}
-              className="w-full py-3 bg-zinc-800 text-zinc-100 rounded-xl text-xs font-bold hover:bg-zinc-700 transition-colors flex items-center justify-center gap-2"
-            >
-              <LogIn className="w-4 h-4" />
-              OPEN IN NEW TAB
-            </button>
-            
-            <button
-              onClick={handleLogout}
-              className="w-full py-3 border border-zinc-800 text-zinc-500 rounded-xl text-[10px] font-bold hover:bg-zinc-900 transition-colors uppercase tracking-widest"
-            >
-              Clear Session & Sign Out
-            </button>
-          </div>
-          
-          {authStatus && !authStatus.authenticated && (
-            <div className="mt-8 p-4 bg-zinc-950/50 rounded-2xl border border-zinc-800 text-left">
-              <p className="text-[9px] text-zinc-600 uppercase tracking-widest font-bold mb-2">Diagnostic Data</p>
-              <div className="space-y-1 font-mono text-[8px] text-zinc-500 break-all">
-                <p>Session: {authStatus.debug?.sessionExists ? 'ACTIVE' : 'MISSING'}</p>
-                <p>Tokens: {authStatus.debug?.tokensExist ? 'PRESENT' : 'NONE'}</p>
-                <p>Firebase: {firebaseUser ? 'CONNECTED' : 'DISCONNECTED'}</p>
-                <p>Origin: {window.location.origin}</p>
-                <p>Redirect: {authStatus.debug?.redirectUri}</p>
+      <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-emerald-500/30">
+        {/* Navigation */}
+        <nav className="border-b border-slate-800/50 bg-slate-950/50 backdrop-blur-md sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center border border-emerald-500/20">
+                <Radar className="w-6 h-6 text-emerald-500" />
               </div>
-              <button 
-                onClick={() => checkAuthStatus()}
-                className="mt-3 w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-colors"
-              >
-                Retry Auth Check
-              </button>
+              <span className="text-xl font-black tracking-tighter uppercase italic text-slate-100">Connect.Five24</span>
             </div>
-          )}
-          
-          {isFirebaseAuthed && (
-            <button
-              onClick={() => auth.signOut()}
-              className="mt-6 text-xs text-zinc-600 hover:text-zinc-400 transition-colors uppercase tracking-widest font-bold"
+            <button 
+              onClick={handleConnectAccount}
+              className="px-6 py-2.5 bg-slate-100 text-slate-950 rounded-xl font-bold text-sm hover:bg-white transition-all shadow-lg shadow-white/5"
             >
-              Sign Out of Firebase
+              Sign In
             </button>
-          )}
-          
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-4 text-xs text-zinc-600 hover:text-zinc-400 transition-colors flex items-center justify-center gap-1 mx-auto"
-          >
-            <RefreshCw className="w-3 h-3" />
-            FORCE REFRESH
-          </button>
-          
-          <p className="mt-10 text-[10px] text-zinc-600 uppercase tracking-[0.2em] font-bold">Secure Environment v2.0</p>
-        </motion.div>
+          </div>
+        </nav>
+
+        {/* Hero Section */}
+        <main className="max-w-7xl mx-auto px-6 pt-20 pb-32">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8 }}
+            >
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-bold uppercase tracking-widest mb-6">
+                <Sparkles className="w-3 h-3" />
+                Next-Gen Sales Intelligence
+              </div>
+              <h1 className="text-6xl lg:text-7xl font-black tracking-tighter uppercase italic leading-[0.9] mb-8">
+                Lead Radar & <br />
+                <span className="text-emerald-500">Sales Coach.</span>
+              </h1>
+              <p className="text-slate-400 text-lg mb-10 max-w-lg leading-relaxed">
+                Connect.Five24 transforms how you discover and engage leads. Real-time radar discovery meets AI-powered sales coaching to close deals faster.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <button 
+                  onClick={handleConnectAccount}
+                  className="px-8 py-4 bg-emerald-600 text-white rounded-2xl font-bold text-lg hover:bg-emerald-500 transition-all shadow-xl shadow-emerald-900/20 flex items-center justify-center gap-3 group"
+                >
+                  Get Started Now
+                  <LogIn className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </button>
+                <div className="flex items-center gap-4 px-6 py-4 bg-slate-900/50 border border-slate-800 rounded-2xl">
+                  <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                  <span className="text-xs font-medium text-slate-400">Enterprise-Grade Security</span>
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              className="relative"
+            >
+              <div className="absolute -inset-4 bg-emerald-500/10 blur-3xl rounded-full" />
+              <div className="relative bg-slate-900 border border-slate-800 p-8 rounded-[2.5rem] shadow-2xl">
+                <div className="aspect-video bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden relative group">
+                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Radar className="w-20 h-20 text-emerald-500/20 animate-pulse" />
+                  </div>
+                  {/* Mock Radar UI */}
+                  <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
+                    <div className="space-y-1">
+                      <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <motion.div 
+                          className="h-full bg-emerald-500"
+                          animate={{ width: ['0%', '100%'] }}
+                          transition={{ duration: 2, repeat: Infinity }}
+                        />
+                      </div>
+                      <p className="text-[8px] font-mono text-emerald-500 uppercase">Scanning Local Leads...</p>
+                    </div>
+                    <div className="w-12 h-12 rounded-full border-2 border-emerald-500/30 flex items-center justify-center">
+                      <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Features */}
+          <div className="grid md:grid-cols-3 gap-8 mt-32">
+            {[
+              {
+                icon: Globe,
+                title: "Map Discovery",
+                desc: "Visualize your market with real-time geographic lead radar. Find opportunities where they live."
+              },
+              {
+                icon: UserCheck,
+                title: "EU Verification",
+                desc: "Ensure compliance and data integrity with our built-in End-User verification workflow."
+              },
+              {
+                icon: Brain,
+                title: "AI Coaching",
+                desc: "Get personalized sales strategies and scripts powered by Gemini 1.5 Pro intelligence."
+              }
+            ].map((feature, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 + (i * 0.1) }}
+                className="p-8 bg-slate-900/50 border border-slate-800 rounded-3xl hover:border-slate-700 transition-colors group"
+              >
+                <div className="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-emerald-500/10 transition-colors">
+                  <feature.icon className="w-6 h-6 text-slate-400 group-hover:text-emerald-500 transition-colors" />
+                </div>
+                <h3 className="text-xl font-bold mb-3 text-slate-100">{feature.title}</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">{feature.desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </main>
+
+        {/* Footer */}
+        <footer className="border-t border-slate-800/50 py-12">
+          <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-widest">
+              <ShieldCheck className="w-4 h-4" />
+              Secure Environment v2.0
+            </div>
+            <p className="text-slate-600 text-[10px] uppercase tracking-widest font-bold">
+              © 2026 Connect.Five24. All Rights Reserved.
+            </p>
+          </div>
+        </footer>
       </div>
     );
   }
@@ -819,76 +871,150 @@ function App() {
   // Onboarding Overlay
   if (onboardingStep < 3 && !DEBUG_MODE) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/90 backdrop-blur-md p-6">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-xl p-6">
         <motion.div 
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="max-w-2xl w-full bg-zinc-900 border border-zinc-800 p-10 rounded-3xl shadow-2xl"
+          className="max-w-2xl w-full bg-slate-900 border border-slate-800 p-10 rounded-[2.5rem] shadow-2xl relative overflow-hidden"
         >
-          <div className="flex items-center gap-4 mb-8">
-            <div className="p-3 bg-emerald-500/10 rounded-2xl">
-              <Radar className="w-8 h-8 text-emerald-500" />
+          {/* Privacy Shield Background Pattern */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 blur-3xl rounded-full -mr-32 -mt-32" />
+          
+          <div className="flex items-center gap-4 mb-10 relative">
+            <div className="p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20">
+              <ShieldCheck className="w-8 h-8 text-emerald-500" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight uppercase tracking-widest">GETTING STARTED</h1>
-              <p className="text-zinc-500 text-xs uppercase tracking-widest font-bold">Project: Five24 Connect</p>
+              <h1 className="text-2xl font-black tracking-tighter uppercase italic text-slate-100">Security First Setup</h1>
+              <p className="text-slate-500 text-[10px] uppercase tracking-[0.3em] font-bold">Trust-Verified Environment</p>
             </div>
           </div>
 
-          <div className="space-y-8 mb-12">
-            {/* Step 1 */}
-            <div className={cn("flex gap-6 transition-opacity", onboardingStep !== 1 && "opacity-40")}>
+          {/* Privacy Shield Component */}
+          <div className="mb-10 p-6 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl flex items-center gap-4">
+            <div className="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center shrink-0">
+              <Lock className="w-6 h-6 text-emerald-500" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-emerald-500 uppercase tracking-widest mb-1">Encryption Active</h4>
+              <p className="text-slate-400 text-xs leading-relaxed">
+                Your API keys are stored in your <span className="text-emerald-500 font-bold">Local Browser only</span>. They never touch our servers.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-10 mb-12">
+            {/* Step 1: Identity */}
+            <div className={cn("flex gap-6 transition-all", onboardingStep !== 1 && "opacity-40 grayscale")}>
               <div className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0 transition-colors",
-                onboardingStep >= 1 ? "bg-emerald-500 text-zinc-950" : "bg-zinc-800 text-zinc-500"
-              )}>1</div>
-              <div>
-                <h3 className="text-lg font-bold mb-1">Connect Account</h3>
-                <p className="text-zinc-400 text-sm mb-4">Link your Google account to authorize radar features.</p>
+                "w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg shrink-0 border transition-all",
+                onboardingStep >= 1 ? "bg-emerald-500 border-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20" : "bg-slate-800 border-slate-700 text-slate-500"
+              )}>
+                {onboardingStep > 1 ? <CheckCircle2 className="w-6 h-6" /> : "01"}
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold mb-1 text-slate-100">Identity Verification</h3>
+                <p className="text-slate-400 text-sm mb-4">Securely link your Google account to establish your workspace.</p>
                 {onboardingStep === 1 && (
                   <button 
                     onClick={handleConnectAccount}
-                    className="px-6 py-2.5 bg-zinc-100 text-zinc-950 rounded-lg font-bold hover:bg-white transition-colors flex items-center gap-2"
+                    className="px-6 py-3 bg-slate-100 text-slate-950 rounded-xl font-bold hover:bg-white transition-all flex items-center gap-3 shadow-lg shadow-white/5"
                   >
-                    <RefreshCw className="w-4 h-4" />
+                    <img src="https://www.google.com/favicon.ico" className="w-4 h-4" alt="Google" />
                     Connect Google Account
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Step 2 */}
-            <div className={cn("flex gap-6 transition-opacity", onboardingStep !== 2 && "opacity-40")}>
+            {/* Step 2: API Configuration */}
+            <div className={cn("flex gap-6 transition-all", onboardingStep !== 2 && "opacity-40 grayscale")}>
               <div className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0 transition-colors",
-                onboardingStep >= 2 ? "bg-emerald-500 text-zinc-950" : "bg-zinc-800 text-zinc-500"
-              )}>2</div>
-              <div>
-                <h3 className="text-lg font-bold mb-1">Initialize Radar</h3>
-                <p className="text-zinc-400 text-sm mb-4">Provision Maps & Places APIs on your project.</p>
+                "w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg shrink-0 border transition-all",
+                onboardingStep >= 2 ? "bg-emerald-500 border-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20" : "bg-slate-800 border-slate-700 text-slate-500"
+              )}>
+                {onboardingStep > 2 ? <CheckCircle2 className="w-6 h-6" /> : "02"}
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold mb-1 text-slate-100">Secure Configuration</h3>
+                <p className="text-slate-400 text-sm mb-6">Connect your intelligence engines to power the radar and coach.</p>
+                
                 {onboardingStep === 2 && (
-                  <div className="space-y-4">
-                    <div className="flex gap-3">
+                  <div className="space-y-6 bg-slate-950/50 p-6 rounded-3xl border border-slate-800">
+                    {/* Gemini Key */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Gemini AI Key</label>
+                        <button 
+                          onClick={() => window.open('https://aistudio.google.com/app/apikey', '_blank')}
+                          className="text-[10px] font-bold text-emerald-500 hover:text-emerald-400 flex items-center gap-1 transition-colors"
+                        >
+                          <HelpCircle className="w-3 h-3" />
+                          Where do I find this?
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600" />
+                        <input 
+                          type="password"
+                          placeholder="AI Studio API Key..."
+                          value={localStorage.getItem('GEMINI_API_KEY') || ''}
+                          onChange={(e) => {
+                            localStorage.setItem('GEMINI_API_KEY', e.target.value);
+                            // Force re-render if needed or just let the save handle it
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-xl py-3 pl-12 pr-4 text-sm focus:border-emerald-500/50 outline-none transition-all font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Maps Key */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Google Maps Key</label>
+                        <button 
+                          onClick={() => window.open('https://console.cloud.google.com/google/maps-apis/credentials', '_blank')}
+                          className="text-[10px] font-bold text-emerald-500 hover:text-emerald-400 flex items-center gap-1 transition-colors"
+                        >
+                          <HelpCircle className="w-3 h-3" />
+                          Where do I find this?
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600" />
+                        <input 
+                          type="password"
+                          placeholder="Google Cloud API Key..."
+                          value={localStorage.getItem('GOOGLE_MAPS_PLATFORM_KEY') || ''}
+                          onChange={(e) => {
+                            localStorage.setItem('GOOGLE_MAPS_PLATFORM_KEY', e.target.value);
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-xl py-3 pl-12 pr-4 text-sm focus:border-emerald-500/50 outline-none transition-all font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-4 flex gap-3">
                       <button 
                         onClick={handleInitializeRadar}
                         disabled={isInitializing}
-                        className="px-6 py-2.5 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-500 disabled:opacity-50 transition-colors flex items-center gap-2"
+                        className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-500 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20"
                       >
-                        {isInitializing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                        Initialize Radar Services
+                        {isInitializing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                        Verify & Activate
                       </button>
                       <button 
                         onClick={() => {
                           setSimulationMode(true);
                           setOnboardingStep(3);
                         }}
-                        className="px-6 py-2.5 bg-zinc-800 text-zinc-400 rounded-lg font-bold hover:bg-zinc-700 transition-colors"
+                        className="px-6 py-3 bg-slate-800 text-slate-400 rounded-xl font-bold hover:bg-slate-700 transition-all"
                       >
-                        Skip to Simulation
+                        Skip
                       </button>
                     </div>
                     {initializationError && (
-                      <p className="text-red-400 text-xs font-medium">{initializationError}</p>
+                      <p className="text-red-400 text-xs font-medium text-center">{initializationError}</p>
                     )}
                   </div>
                 )}
@@ -896,7 +1022,7 @@ function App() {
             </div>
           </div>
 
-          <div className="pt-6 border-t border-zinc-800 flex justify-between items-center">
+          <div className="pt-8 border-t border-slate-800 flex justify-between items-center relative">
             <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-bold">Secure Connection Required</p>
             {onboardingStep === 3 && (
               <button 
@@ -955,29 +1081,21 @@ function App() {
     }
   }, [isAuthReady, purgeOldLeads]);
 
-  const handleSaveSettings = (gemini: string, maps: string) => {
+  const handleSaveSettings = (gemini: string, maps: string, simulation: boolean) => {
     localStorage.setItem('GEMINI_API_KEY', gemini);
     localStorage.setItem('GOOGLE_MAPS_API_KEY', maps);
     setUserGeminiKey(gemini);
     setUserMapsKey(maps);
+    setSimulationMode(simulation);
     
-    // If we just added a maps key, try to disable simulation mode
-    if (maps) {
+    // If we just added a maps key and simulation is off, try to clear errors
+    if (maps && !simulation) {
       setMapError(null);
-      setSimulationMode(false);
     }
   };
 
   return (
-    <APIProvider 
-      apiKey={effectiveMapsKey} 
-      version="weekly"
-      onLoad={() => {
-        console.log('Maps API Loaded Successfully');
-        setMapError(null);
-      }}
-    >
-      <div className="flex h-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden">
+    <div className="flex h-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden">
       {/* Sidebar - Lead List */}
       <div className="w-80 border-r border-zinc-800 flex flex-col bg-zinc-900/50 backdrop-blur-xl">
         <div className="p-6 border-b border-zinc-800">
@@ -1186,6 +1304,14 @@ function App() {
 
                   <div className="space-y-3">
                     <button 
+                      onClick={() => setIsSettingsOpen(true)}
+                      className="w-full py-3 bg-emerald-500 text-zinc-950 rounded-xl font-bold hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Key className="w-4 h-4" />
+                      Update API Key
+                    </button>
+
+                    <button 
                       onClick={() => {
                         setMapError(null);
                         setSimulationMode(false);
@@ -1216,54 +1342,63 @@ function App() {
                 </div>
               </div>
             ) : ((window as any).google?.maps) ? (
-              <Map
-                defaultCenter={radarLocation}
-                defaultZoom={13}
-                mapId="DEMO_MAP_ID"
-                className="w-full h-full"
-                disableDefaultUI={true}
-                styles={[
-                  { elementType: "geometry", stylers: [{ color: "#18181b" }] },
-                  { elementType: "labels.text.stroke", stylers: [{ color: "#18181b" }] },
-                  { elementType: "labels.text.fill", stylers: [{ color: "#71717a" }] },
-                  { featureType: "road", elementType: "geometry", stylers: [{ color: "#27272a" }] },
-                  { featureType: "water", elementType: "geometry", stylers: [{ color: "#09090b" }] },
-                ]}
+              <APIProvider 
+                apiKey={effectiveMapsKey} 
+                version="weekly"
+                onLoad={() => {
+                  console.log('Maps API Loaded Successfully');
+                  setMapError(null);
+                }}
               >
-                {displayLeads.map((lead) => {
-                  if (!lead.source?.location) return null;
-                  
-                  // Extra safety check for AdvancedMarker requirements
-                  if (!(window as any).google?.maps?.marker) {
-                    return null;
-                  }
-                  
-                  const isLeadExpired = lead.compliance?.collectedAt ? isExpired(lead.compliance.collectedAt) : false;
-                  const isVerified = lead.compliance?.verifiedByEU || false;
+                <Map
+                  defaultCenter={radarLocation}
+                  defaultZoom={13}
+                  mapId="DEMO_MAP_ID"
+                  className="w-full h-full"
+                  disableDefaultUI={true}
+                  styles={[
+                    { elementType: "geometry", stylers: [{ color: "#18181b" }] },
+                    { elementType: "labels.text.stroke", stylers: [{ color: "#18181b" }] },
+                    { elementType: "labels.text.fill", stylers: [{ color: "#71717a" }] },
+                    { featureType: "road", elementType: "geometry", stylers: [{ color: "#27272a" }] },
+                    { featureType: "water", elementType: "geometry", stylers: [{ color: "#09090b" }] },
+                  ]}
+                >
+                  {displayLeads.map((lead) => {
+                    if (!lead.source?.location) return null;
+                    
+                    // Extra safety check for AdvancedMarker requirements
+                    if (!(window as any).google?.maps?.marker) {
+                      return null;
+                    }
+                    
+                    const isLeadExpired = lead.compliance?.collectedAt ? isExpired(lead.compliance.collectedAt) : false;
+                    const isVerified = lead.compliance?.verifiedByEU || false;
 
-                  return (
-                    <AdvancedMarker
-                      key={lead.id}
-                      position={lead.source.location}
-                      onClick={() => handleSelectLead(lead)}
-                    >
-                      <div className={cn(
-                        "relative flex items-center justify-center transition-transform hover:scale-110",
-                        selectedLead?.id === lead.id ? "scale-125" : ""
-                      )}>
+                    return (
+                      <AdvancedMarker
+                        key={lead.id}
+                        position={lead.source.location}
+                        onClick={() => handleSelectLead(lead)}
+                      >
                         <div className={cn(
-                          "absolute w-8 h-8 rounded-full animate-ping opacity-20",
-                          isLeadExpired && !isVerified ? "bg-rose-500" : "bg-emerald-500"
-                        )} />
-                        <div className={cn(
-                          "w-4 h-4 rounded-full border-2 border-zinc-950 shadow-lg",
-                          isLeadExpired && !isVerified ? "bg-rose-500" : "bg-emerald-500"
-                        )} />
-                      </div>
-                    </AdvancedMarker>
-                  );
-                })}
-              </Map>
+                          "relative flex items-center justify-center transition-transform hover:scale-110",
+                          selectedLead?.id === lead.id ? "scale-125" : ""
+                        )}>
+                          <div className={cn(
+                            "absolute w-8 h-8 rounded-full animate-ping opacity-20",
+                            isLeadExpired && !isVerified ? "bg-rose-500" : "bg-emerald-500"
+                          )} />
+                          <div className={cn(
+                            "w-4 h-4 rounded-full border-2 border-zinc-950 shadow-lg",
+                            isLeadExpired && !isVerified ? "bg-rose-500" : "bg-emerald-500"
+                          )} />
+                        </div>
+                      </AdvancedMarker>
+                    );
+                  })}
+                </Map>
+              </APIProvider>
             ) : (
               <div className="flex-1 flex items-center justify-center bg-zinc-950">
                 <div className="text-center">
@@ -1292,6 +1427,24 @@ function App() {
                 <p className="text-zinc-500 text-xs uppercase tracking-[0.3em] font-bold">Strategic Lead Management</p>
               </div>
               <div className="flex gap-4">
+                <div className="bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl flex items-center gap-3">
+                  <div className="flex flex-col items-end">
+                    <span className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Active Leads</span>
+                    <span className="text-sm font-mono text-blue-500">
+                      {displayLeads.length}
+                    </span>
+                  </div>
+                  <Target className="w-5 h-5 text-blue-500" />
+                </div>
+                <div className="bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl flex items-center gap-3">
+                  <div className="flex flex-col items-end">
+                    <span className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Win Rate</span>
+                    <span className="text-sm font-mono text-purple-500">
+                      {displayLeads.length > 0 ? Math.round((displayLeads.filter(l => l.crm.status === 'closed').length / displayLeads.length) * 100) : 0}%
+                    </span>
+                  </div>
+                  <CheckCircle2 className="w-5 h-5 text-purple-500" />
+                </div>
                 <div className="bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl flex items-center gap-3">
                   <div className="flex flex-col items-end">
                     <span className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Pipeline Value</span>
@@ -1338,6 +1491,7 @@ function App() {
         onClose={() => setIsSettingsOpen(false)}
         geminiKey={userGeminiKey}
         mapsKey={userMapsKey}
+        simulationMode={simulationMode}
         onSave={handleSaveSettings}
       />
 
@@ -1361,6 +1515,5 @@ function App() {
         }
       `}</style>
     </div>
-    </APIProvider>
   );
 }
