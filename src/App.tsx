@@ -1,7 +1,12 @@
 // Force Sync: 2026-04-03T16:51:00Z
 import React, { useState, useEffect, useCallback } from 'react';
 import { APIProvider, Map, AdvancedMarker, Pin, InfoWindow, useMap } from '@vis.gl/react-google-maps';
-import { Radar, Target, MessageSquare, Plus, RefreshCw, DollarSign, Clock, MapPin, Loader2, LogIn, Sparkles, AlertCircle, Key, CheckCircle2, ShieldCheck, Lock, HelpCircle, Globe, UserCheck, Brain, ExternalLink } from 'lucide-react';
+import { 
+  Radar, Target, MessageSquare, Plus, RefreshCw, DollarSign, Clock, MapPin, 
+  Loader2, LogIn, Sparkles, AlertCircle, Key, CheckCircle2, ShieldCheck, 
+  Lock, HelpCircle, Globe, UserCheck, Brain, ExternalLink, Settings,
+  LayoutDashboard, Users, BarChart3, ChevronRight, Bell
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
 import { clsx } from 'clsx';
@@ -18,7 +23,7 @@ import { CoachPanel } from './components/CoachPanel';
 import { LeadGenerationModal } from './components/LeadGenerationModal';
 import { LeadPipeline } from './components/LeadPipeline';
 import { SettingsModal } from './components/SettingsModal';
-import { Settings } from 'lucide-react';
+import { AIStudio } from './components/AIStudio';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -133,6 +138,7 @@ export default function AppWrapper() {
 function App() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [activePage, setActivePage] = useState<'dashboard' | 'radar' | 'leads' | 'analytics' | 'ai-studio'>('radar');
   const [isCoachOpen, setIsCoachOpen] = useState(false);
   const [radarLocation, setRadarLocation] = useState({ lat: 37.42, lng: -122.08 });
   
@@ -161,7 +167,6 @@ function App() {
   const [mapError, setMapError] = useState<string | null>(null);
   const [simulationMode, setSimulationMode] = useState(false);
   const [isGeneratingLeads, setIsGeneratingLeads] = useState(false);
-  const [viewMode, setViewMode] = useState<'radar' | 'pipeline'>('pipeline');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [userGeminiKey, setUserGeminiKey] = useState(getLocalGeminiKey());
   const [userMapsKey, setUserMapsKey] = useState(getLocalMapsKey());
@@ -325,40 +330,51 @@ function App() {
       }).join(' ');
       
       if (message.includes('ApiTargetBlockedMapError') || message.includes('gm_authFailure')) {
-        const errorMsg = 'ApiTargetBlockedMapError: Maps JavaScript API is not authorized for this key.';
+        const isPreview = window.location.hostname.includes('.run.app');
+        const errorMsg = isPreview 
+          ? 'ApiTargetBlockedMapError: Maps JavaScript API is restricted and doesn\'t allow the AI Studio preview domain (.run.app). Please use an unrestricted key for testing or enable simulation mode.'
+          : 'ApiTargetBlockedMapError: Maps JavaScript API is not authorized for this key. Ensure "Maps JavaScript API" and "Places API" are enabled and authorized for this domain.';
         setMapError(errorMsg);
-        setSimulationMode(true); // Auto-switch to simulation immediately
+        // Don't force simulationMode to false if the user explicitly wants it
       }
       originalError.apply(console, args);
     };
 
     // Standard Google Maps auth failure handler
     (window as any).gm_authFailure = () => {
-      const errorMsg = 'ApiTargetBlockedMapError: Google Maps authentication failed. This usually means your API Key is restricted and doesn\'t allow the "Maps JavaScript API".';
+      const isPreview = window.location.hostname.includes('.run.app');
+      const errorMsg = isPreview
+        ? 'ApiTargetBlockedMapError: Google Maps authentication failed. Your API Key likely has "HTTP Referrer" restrictions that block the AI Studio preview domain (.run.app).'
+        : 'ApiTargetBlockedMapError: Google Maps authentication failed. This usually means your API Key is restricted and doesn\'t allow the "Maps JavaScript API" or "Places API".';
       console.error('Google Maps authentication failed (gm_authFailure)');
       setMapError(errorMsg);
-      setSimulationMode(false); // Don't auto-switch to simulation, show the error screen instead for better guidance
     };
 
     // Check for global error flag
     if ((window as any).__google_maps_error) {
-      setMapError('ApiTargetBlockedMapError: Maps JavaScript API is not authorized for this key.');
-      setSimulationMode(true);
+      const isPreview = window.location.hostname.includes('.run.app');
+      setMapError(isPreview 
+        ? 'ApiTargetBlockedMapError: Maps JavaScript API is restricted for the preview domain.' 
+        : 'ApiTargetBlockedMapError: Maps JavaScript API is not authorized for this key.');
     }
 
     // Global error listener for script loading issues
     const handleGlobalError = (event: ErrorEvent) => {
-      if (event.message && (event.message.includes('ApiTargetBlockedMapError') || event.message.includes('gm_authFailure'))) {
-        setMapError('ApiTargetBlockedMapError: Maps JavaScript API is not authorized for this key.');
-        setSimulationMode(true);
+      if (event.message && (event.message.includes('ApiTargetBlockedMapError') || event.message.includes('gm_authFailure') || event.message.includes('Google Maps JavaScript API error'))) {
+        const isPreview = window.location.hostname.includes('.run.app');
+        setMapError(isPreview 
+          ? 'ApiTargetBlockedMapError: Maps JavaScript API is restricted for the preview domain.' 
+          : 'ApiTargetBlockedMapError: Maps JavaScript API is not authorized for this key.');
       }
     };
 
     const handlePromiseRejection = (event: PromiseRejectionEvent) => {
       const reason = String(event.reason);
       if (reason.includes('ApiTargetBlockedMapError') || reason.includes('gm_authFailure')) {
-        setMapError('ApiTargetBlockedMapError: Maps JavaScript API is not authorized for this key.');
-        setSimulationMode(true);
+        const isPreview = window.location.hostname.includes('.run.app');
+        setMapError(isPreview 
+          ? 'ApiTargetBlockedMapError: Maps JavaScript API is restricted for the preview domain.' 
+          : 'ApiTargetBlockedMapError: Maps JavaScript API is not authorized for this key.');
       }
     };
 
@@ -368,9 +384,11 @@ function App() {
         mutation.addedNodes.forEach((node) => {
           if (node instanceof HTMLElement) {
             const text = node.innerText || '';
-            if (text.includes('ApiTargetBlockedMapError') || text.includes('Google Maps JavaScript API error')) {
-              setMapError('ApiTargetBlockedMapError: Maps JavaScript API is not authorized for this key.');
-              setSimulationMode(true);
+            if (text.includes('ApiTargetBlockedMapError') || text.includes('Google Maps JavaScript API error') || text.includes('restricted')) {
+              const isPreview = window.location.hostname.includes('.run.app');
+              setMapError(isPreview 
+                ? 'ApiTargetBlockedMapError: Maps JavaScript API is restricted for the preview domain.' 
+                : 'ApiTargetBlockedMapError: Maps JavaScript API is not authorized for this key.');
             }
           }
         });
@@ -383,7 +401,7 @@ function App() {
 
     // Map loading timeout - much shorter for better UX
     const mapTimeout = setTimeout(() => {
-      if (!simulationMode && !mapError && viewMode === 'radar') {
+      if (!simulationMode && !mapError && activePage === 'radar') {
         console.warn('Map loading timeout - auto-switching to Simulation Mode');
         setSimulationMode(true);
       }
@@ -395,11 +413,10 @@ function App() {
       // Validate origin is from AI Studio preview, localhost, or any Firebase Auth domain
       const origin = event.origin;
       const isAuthorizedOrigin = 
-        origin.endsWith('.run.app') || 
         origin.includes('localhost') || 
         origin.includes('127.0.0.1') ||
-        origin.endsWith('.firebaseapp.com') ||
-        origin === 'https://connect.five24creativestudio.com';
+        origin === 'https://connect.five24creativestudio.com' ||
+        origin.includes('.run.app');
       
       if (!isAuthorizedOrigin) {
         console.warn('Unauthorized message origin:', origin);
@@ -427,7 +444,7 @@ function App() {
       console.error = originalError;
       clearTimeout(mapTimeout);
     };
-  }, [checkAuthStatus, simulationMode, mapError, viewMode]);
+  }, [checkAuthStatus, simulationMode, mapError, activePage]);
 
   const handleSelectLead = useCallback((lead: Lead) => {
     setSelectedLead(lead);
@@ -1095,130 +1112,282 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden">
-      {/* Sidebar - Lead List */}
-      <div className="w-80 border-r border-zinc-800 flex flex-col bg-zinc-900/50 backdrop-blur-xl">
-        <div className="p-6 border-b border-zinc-800">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Radar className="w-6 h-6 text-emerald-500 animate-pulse" />
-              <h1 className="text-xl font-bold tracking-tight">Five24 Connect</h1>
+    <APIProvider 
+      apiKey={effectiveMapsKey || ''} 
+      version="weekly"
+      libraries={['places']}
+      onLoad={() => {
+        console.log('Maps API Loaded Successfully');
+        setMapError(null);
+      }}
+    >
+      <div className="flex h-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden">
+        {/* Main Navigation Sidebar */}
+        <div className="w-20 border-r border-zinc-800 flex flex-col items-center py-8 bg-zinc-950 z-50">
+          <div className="mb-12">
+            <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+              <Radar className="w-6 h-6 text-zinc-950" />
             </div>
+          </div>
+          
+          <div className="flex-1 flex flex-col gap-4">
+            {[
+              { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+              { id: 'radar', icon: Radar, label: 'Lead Radar' },
+              { id: 'leads', icon: Users, label: 'Pipeline' },
+              { id: 'ai-studio', icon: Brain, label: 'AI Studio' },
+              { id: 'analytics', icon: BarChart3, label: 'Analytics' },
+            ].map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActivePage(item.id as any)}
+                className={cn(
+                  "p-3 rounded-xl transition-all duration-200 group relative",
+                  activePage === item.id 
+                    ? "bg-emerald-500/10 text-emerald-500" 
+                    : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900"
+                )}
+              >
+                <item.icon className="w-6 h-6" />
+                <div className="absolute left-full ml-4 px-2 py-1 bg-zinc-800 text-white text-[10px] font-bold uppercase tracking-widest rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+                  {item.label}
+                </div>
+                {activePage === item.id && (
+                  <motion.div 
+                    layoutId="activeNav"
+                    className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-emerald-500 rounded-r-full"
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-4 mt-auto">
+            <button className="p-3 text-zinc-500 hover:text-zinc-300 transition-colors relative group">
+              <Bell className="w-6 h-6" />
+              <div className="absolute top-3 right-3 w-2 h-2 bg-rose-500 rounded-full border-2 border-zinc-950" />
+            </button>
             <button 
               onClick={() => setIsSettingsOpen(true)}
-              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-500 hover:text-zinc-300"
+              className="p-3 text-zinc-500 hover:text-zinc-300 transition-colors group relative"
             >
-              <Settings className="w-5 h-5" />
+              <Settings className="w-6 h-6" />
+              <div className="absolute left-full ml-4 px-2 py-1 bg-zinc-800 text-white text-[10px] font-bold uppercase tracking-widest rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+                Settings
+              </div>
             </button>
+            <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden">
+              <div className="w-full h-full bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex items-center justify-center text-[10px] font-bold text-emerald-500">
+                BC
+              </div>
+            </div>
           </div>
-          
-          <div className="flex flex-col gap-4">
-            <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800">
-              <button 
-                onClick={() => setViewMode('radar')}
-                className={cn(
-                  "flex-1 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all",
-                  viewMode === 'radar' ? "bg-zinc-800 text-emerald-500 shadow-lg" : "text-zinc-500 hover:text-zinc-300"
-                )}
-              >
-                Radar View
-              </button>
-              <button 
-                onClick={() => setViewMode('pipeline')}
-                className={cn(
-                  "flex-1 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all",
-                  viewMode === 'pipeline' ? "bg-zinc-800 text-emerald-500 shadow-lg" : "text-zinc-500 hover:text-zinc-300"
-                )}
-              >
-                Pipeline
-              </button>
+        </div>
+
+        {/* Context Sidebar - Lead List (Visible on Radar and Dashboard) */}
+        {(activePage === 'radar' || activePage === 'dashboard') && (
+          <div className="w-80 border-r border-zinc-800 flex flex-col bg-zinc-900/50 backdrop-blur-xl">
+            <div className="p-6 border-b border-zinc-800">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-bold tracking-tight">Five24 Connect</h1>
+                </div>
+              </div>
+              
+              <div className="flex flex-col gap-4">
+                <button 
+                  onClick={() => setIsGeneratingLeads(true)}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-[10px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Generate New Leads
+                </button>
+              </div>
             </div>
 
-            <button 
-              onClick={() => setIsGeneratingLeads(true)}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-[10px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20"
-            >
-              <Sparkles className="w-4 h-4" />
-              Generate New Leads
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-          <div className="flex items-center justify-between px-2 mb-2">
-            <span className="text-xs font-mono text-zinc-500 uppercase">Active Leads ({displayLeads.length})</span>
-            <button className="p-1 hover:bg-zinc-800 rounded transition-colors">
-              <Plus className="w-4 h-4 text-emerald-500" />
-            </button>
-          </div>
-          
-          {displayLeads.map((lead) => {
-            const isLeadExpired = lead.compliance?.collectedAt ? isExpired(lead.compliance.collectedAt) : false;
-            const isVerified = lead.compliance?.verifiedByEU || false;
-            
-            return (
-              <motion.div
-                key={lead.id}
-                layoutId={lead.id}
-                onClick={() => setSelectedLead(lead)}
-                className={cn(
-                  "p-4 rounded-xl border cursor-pointer transition-all duration-200 group",
-                  selectedLead?.id === lead.id 
-                    ? "bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.1)]" 
-                    : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
-                )}
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-semibold text-sm truncate pr-2">{lead.source?.name || 'Unknown Business'}</h3>
-                  {lead.source?.rating && (
-                    <div className="flex items-center gap-1 text-[10px] bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400">
-                      <span>{lead.source.rating.toFixed(1)}</span>
-                      <span className="text-emerald-500">★</span>
-                    </div>
-                  )}
-                </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+              <div className="flex items-center justify-between px-2 mb-2">
+                <span className="text-xs font-mono text-zinc-500 uppercase">Active Leads ({displayLeads.length})</span>
+                <button className="p-1 hover:bg-zinc-800 rounded transition-colors">
+                  <Plus className="w-4 h-4 text-emerald-500" />
+                </button>
+              </div>
+              
+              {displayLeads.map((lead) => {
+                const isLeadExpired = lead.compliance?.collectedAt ? isExpired(lead.compliance.collectedAt) : false;
+                const isVerified = lead.compliance?.verifiedByEU || false;
                 
-                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-                  <div className="flex items-center gap-1 text-zinc-500">
-                    <DollarSign className="w-3 h-3" />
-                    <span className={lead.crm?.monetaryValue > 0 ? "text-emerald-400" : ""}>
-                      ${(lead.crm?.monetaryValue || 0).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1 text-zinc-500 justify-end">
-                    <Clock className="w-3 h-3" />
-                    <span className={isLeadExpired && !isVerified ? "text-rose-500" : "text-zinc-400"}>
-                      {lead.compliance?.collectedAt ? new Date(lead.compliance.collectedAt).toLocaleDateString() : 'Unknown'}
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="mt-2 flex items-center justify-between">
-                  <span className={cn(
-                    "text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded",
-                    lead.crm?.status === 'new' ? "bg-blue-500/10 text-blue-500" :
-                    lead.crm?.status === 'contacted' ? "bg-amber-500/10 text-amber-500" :
-                    lead.crm?.status === 'qualified' ? "bg-purple-500/10 text-purple-500" :
-                    "bg-emerald-500/10 text-emerald-500"
-                  )}>
-                    {lead.crm?.status || 'new'}
-                  </span>
-                  {isLeadExpired && !isVerified && (
-                    <div className="flex items-center gap-1 text-[9px] text-rose-500 uppercase font-bold tracking-tighter">
-                      <RefreshCw className="w-2.5 h-2.5 animate-spin-slow" />
-                      Purge
+                return (
+                  <motion.div
+                    key={lead.id}
+                    layoutId={lead.id}
+                    onClick={() => setSelectedLead(lead)}
+                    className={cn(
+                      "p-4 rounded-xl border cursor-pointer transition-all duration-200 group",
+                      selectedLead?.id === lead.id 
+                        ? "bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.1)]" 
+                        : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
+                    )}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-semibold text-sm truncate pr-2">{lead.source?.name || 'Unknown Business'}</h3>
+                      {lead.source?.rating && (
+                        <div className="flex items-center gap-1 text-[10px] bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400">
+                          <span>{lead.source.rating.toFixed(1)}</span>
+                          <span className="text-emerald-500">★</span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                      <div className="flex items-center gap-1 text-zinc-500">
+                        <DollarSign className="w-3 h-3" />
+                        <span className={lead.crm?.monetaryValue > 0 ? "text-emerald-400" : ""}>
+                          ${(lead.crm?.monetaryValue || 0).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 text-zinc-500 justify-end">
+                        <Clock className="w-3 h-3" />
+                        <span className={isLeadExpired && !isVerified ? "text-rose-500" : "text-zinc-400"}>
+                          {lead.compliance?.collectedAt ? new Date(lead.compliance.collectedAt).toLocaleDateString() : 'Unknown'}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className={cn(
+                        "text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded",
+                        lead.crm?.status === 'new' ? "bg-blue-500/10 text-blue-500" :
+                        lead.crm?.status === 'contacted' ? "bg-amber-500/10 text-amber-500" :
+                        lead.crm?.status === 'qualified' ? "bg-purple-500/10 text-purple-500" :
+                        "bg-emerald-500/10 text-emerald-500"
+                      )}>
+                        {lead.crm?.status || 'new'}
+                      </span>
+                      {isLeadExpired && !isVerified && (
+                        <div className="flex items-center gap-1 text-[9px] text-rose-500 uppercase font-bold tracking-tighter">
+                          <RefreshCw className="w-2.5 h-2.5 animate-spin-slow" />
+                          Purge
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
       {/* Main View */}
       <div className="flex-1 relative flex flex-col">
-        {viewMode === 'radar' ? (
+        {activePage === 'dashboard' ? (
+          <div className="flex-1 bg-zinc-950 p-8 overflow-y-auto custom-scrollbar">
+            <div className="max-w-6xl mx-auto">
+              <header className="mb-12">
+                <h2 className="text-4xl font-black tracking-tighter uppercase italic mb-2">Executive Overview</h2>
+                <p className="text-zinc-500 text-xs uppercase tracking-[0.4em] font-bold">Five24 Connect Intelligence Dashboard</p>
+              </header>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+                {[
+                  { label: 'Total Pipeline', value: `$${displayLeads.reduce((acc, l) => acc + (l.crm?.monetaryValue || 0), 0).toLocaleString()}`, icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+                  { label: 'Active Leads', value: displayLeads.length, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                  { label: 'Conversion Rate', value: `${displayLeads.length > 0 ? Math.round((displayLeads.filter(l => l.crm?.status === 'closed').length / displayLeads.length) * 100) : 0}%`, icon: Target, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+                  { label: 'Avg. Lead Value', value: `$${displayLeads.length > 0 ? Math.round(displayLeads.reduce((acc, l) => acc + (l.crm?.monetaryValue || 0), 0) / displayLeads.length).toLocaleString() : 0}`, icon: BarChart3, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+                ].map((stat, i) => (
+                  <motion.div
+                    key={stat.label}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.1 }}
+                    className="p-6 bg-zinc-900 border border-zinc-800 rounded-3xl shadow-xl"
+                  >
+                    <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center mb-4", stat.bg)}>
+                      <stat.icon className={cn("w-6 h-6", stat.color)} />
+                    </div>
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">{stat.label}</p>
+                    <p className="text-2xl font-black tracking-tight">{stat.value}</p>
+                  </motion.div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Recent Activity */}
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-400">Strategic Activity</h3>
+                    <button className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest hover:text-emerald-400 transition-colors">View All</button>
+                  </div>
+                  <div className="space-y-4">
+                    {displayLeads.slice(0, 5).map((lead, i) => (
+                      <motion.div
+                        key={lead.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.4 + i * 0.05 }}
+                        className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl flex items-center justify-between group hover:border-zinc-700 transition-colors"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-500">
+                            {lead.source?.name?.[0] || '?'}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold">{lead.source?.name}</p>
+                            <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{lead.crm?.status} • {new Date(lead.compliance?.collectedAt || '').toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <p className="text-sm font-mono text-emerald-500">${(lead.crm?.monetaryValue || 0).toLocaleString()}</p>
+                          <ChevronRight className="w-4 h-4 text-zinc-700 group-hover:text-zinc-400 transition-colors" />
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="space-y-6">
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-400">Quick Actions</h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    <button 
+                      onClick={() => setActivePage('radar')}
+                      className="p-6 bg-emerald-600 hover:bg-emerald-500 text-white rounded-3xl font-bold transition-all flex flex-col gap-3 shadow-lg shadow-emerald-900/20 group"
+                    >
+                      <Radar className="w-8 h-8 group-hover:scale-110 transition-transform" />
+                      <div className="text-left">
+                        <p className="text-sm uppercase tracking-widest">Launch Radar</p>
+                        <p className="text-[10px] opacity-70 font-normal">Scan for local opportunities</p>
+                      </div>
+                    </button>
+                    <button 
+                      onClick={() => setIsGeneratingLeads(true)}
+                      className="p-6 bg-zinc-900 border border-zinc-800 hover:border-emerald-500/50 text-white rounded-3xl font-bold transition-all flex flex-col gap-3 group"
+                    >
+                      <Sparkles className="w-8 h-8 text-emerald-500 group-hover:scale-110 transition-transform" />
+                      <div className="text-left">
+                        <p className="text-sm uppercase tracking-widest">AI Generation</p>
+                        <p className="text-[10px] text-zinc-500 font-normal">Generate targeted prospects</p>
+                      </div>
+                    </button>
+                    <button 
+                      onClick={() => setActivePage('leads')}
+                      className="p-6 bg-zinc-900 border border-zinc-800 hover:border-blue-500/50 text-white rounded-3xl font-bold transition-all flex flex-col gap-3 group"
+                    >
+                      <Users className="w-8 h-8 text-blue-500 group-hover:scale-110 transition-transform" />
+                      <div className="text-left">
+                        <p className="text-sm uppercase tracking-widest">Manage Pipeline</p>
+                        <p className="text-[10px] text-zinc-500 font-normal">Review active negotiations</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : activePage === 'ai-studio' ? (
+          <AIStudio userGeminiKey={userGeminiKey} />
+        ) : activePage === 'radar' ? (
           <div className="flex-1 relative">
             {simulationMode ? (
               <div className="w-full h-full bg-[#09090b] relative overflow-hidden flex items-center justify-center">
@@ -1342,63 +1511,54 @@ function App() {
                 </div>
               </div>
             ) : ((window as any).google?.maps) ? (
-              <APIProvider 
-                apiKey={effectiveMapsKey} 
-                version="weekly"
-                onLoad={() => {
-                  console.log('Maps API Loaded Successfully');
-                  setMapError(null);
-                }}
+              <Map
+                defaultCenter={radarLocation}
+                defaultZoom={13}
+                mapId="DEMO_MAP_ID"
+                className="w-full h-full"
+                disableDefaultUI={true}
+                styles={[
+                  { elementType: "geometry", stylers: [{ color: "#18181b" }] },
+                  { elementType: "labels.text.stroke", stylers: [{ color: "#18181b" }] },
+                  { elementType: "labels.text.fill", stylers: [{ color: "#71717a" }] },
+                  { featureType: "road", elementType: "geometry", stylers: [{ color: "#27272a" }] },
+                  { featureType: "water", elementType: "geometry", stylers: [{ color: "#09090b" }] },
+                ]}
               >
-                <Map
-                  defaultCenter={radarLocation}
-                  defaultZoom={13}
-                  mapId="DEMO_MAP_ID"
-                  className="w-full h-full"
-                  disableDefaultUI={true}
-                  styles={[
-                    { elementType: "geometry", stylers: [{ color: "#18181b" }] },
-                    { elementType: "labels.text.stroke", stylers: [{ color: "#18181b" }] },
-                    { elementType: "labels.text.fill", stylers: [{ color: "#71717a" }] },
-                    { featureType: "road", elementType: "geometry", stylers: [{ color: "#27272a" }] },
-                    { featureType: "water", elementType: "geometry", stylers: [{ color: "#09090b" }] },
-                  ]}
-                >
-                  {displayLeads.map((lead) => {
-                    if (!lead.source?.location) return null;
-                    
-                    // Extra safety check for AdvancedMarker requirements
-                    if (!(window as any).google?.maps?.marker) {
-                      return null;
-                    }
-                    
-                    const isLeadExpired = lead.compliance?.collectedAt ? isExpired(lead.compliance.collectedAt) : false;
-                    const isVerified = lead.compliance?.verifiedByEU || false;
+                {displayLeads.map((lead) => {
+                  if (!lead.source?.location) return null;
+                  
+                  // Extra safety check for AdvancedMarker requirements
+                  if (!(window as any).google?.maps?.marker) {
+                    return null;
+                  }
+                  
+                  const isLeadExpired = lead.compliance?.collectedAt ? isExpired(lead.compliance.collectedAt) : false;
+                  const isVerified = lead.compliance?.verifiedByEU || false;
 
-                    return (
-                      <AdvancedMarker
-                        key={lead.id}
-                        position={lead.source.location}
-                        onClick={() => handleSelectLead(lead)}
-                      >
+                  return (
+                    <AdvancedMarker
+                      key={lead.id}
+                      position={lead.source.location}
+                      onClick={() => handleSelectLead(lead)}
+                    >
+                      <div className={cn(
+                        "relative flex items-center justify-center transition-transform hover:scale-110",
+                        selectedLead?.id === lead.id ? "scale-125" : ""
+                      )}>
                         <div className={cn(
-                          "relative flex items-center justify-center transition-transform hover:scale-110",
-                          selectedLead?.id === lead.id ? "scale-125" : ""
-                        )}>
-                          <div className={cn(
-                            "absolute w-8 h-8 rounded-full animate-ping opacity-20",
-                            isLeadExpired && !isVerified ? "bg-rose-500" : "bg-emerald-500"
-                          )} />
-                          <div className={cn(
-                            "w-4 h-4 rounded-full border-2 border-zinc-950 shadow-lg",
-                            isLeadExpired && !isVerified ? "bg-rose-500" : "bg-emerald-500"
-                          )} />
-                        </div>
-                      </AdvancedMarker>
-                    );
-                  })}
-                </Map>
-              </APIProvider>
+                          "absolute w-8 h-8 rounded-full animate-ping opacity-20",
+                          isLeadExpired && !isVerified ? "bg-rose-500" : "bg-emerald-500"
+                        )} />
+                        <div className={cn(
+                          "w-4 h-4 rounded-full border-2 border-zinc-950 shadow-lg",
+                          isLeadExpired && !isVerified ? "bg-rose-500" : "bg-emerald-500"
+                        )} />
+                      </div>
+                    </AdvancedMarker>
+                  );
+                })}
+              </Map>
             ) : (
               <div className="flex-1 flex items-center justify-center bg-zinc-950">
                 <div className="text-center">
@@ -1419,7 +1579,7 @@ function App() {
               </div>
             </div>
           </div>
-        ) : (
+        ) : activePage === 'leads' ? (
           <div className="flex-1 bg-zinc-950 p-8 overflow-hidden flex flex-col">
             <div className="mb-8 flex justify-between items-end">
               <div>
@@ -1440,7 +1600,7 @@ function App() {
                   <div className="flex flex-col items-end">
                     <span className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Win Rate</span>
                     <span className="text-sm font-mono text-purple-500">
-                      {displayLeads.length > 0 ? Math.round((displayLeads.filter(l => l.crm.status === 'closed').length / displayLeads.length) * 100) : 0}%
+                      {displayLeads.length > 0 ? Math.round((displayLeads.filter(l => l.crm?.status === 'closed').length / displayLeads.length) * 100) : 0}%
                     </span>
                   </div>
                   <CheckCircle2 className="w-5 h-5 text-purple-500" />
@@ -1449,7 +1609,7 @@ function App() {
                   <div className="flex flex-col items-end">
                     <span className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Pipeline Value</span>
                     <span className="text-sm font-mono text-emerald-500">
-                      ${displayLeads.reduce((acc, l) => acc + l.crm.monetaryValue, 0).toLocaleString()}
+                      ${displayLeads.reduce((acc, l) => acc + (l.crm?.monetaryValue || 0), 0).toLocaleString()}
                     </span>
                   </div>
                   <DollarSign className="w-5 h-5 text-emerald-500" />
@@ -1463,6 +1623,14 @@ function App() {
                 onUpdateStatus={handleUpdateLeadStatus}
                 onSelectLead={handleSelectLead}
               />
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 bg-zinc-950 flex items-center justify-center">
+            <div className="text-center">
+              <BarChart3 className="w-16 h-16 text-zinc-800 mx-auto mb-4" />
+              <h2 className="text-xl font-bold text-zinc-500 uppercase tracking-widest">Analytics Engine Offline</h2>
+              <p className="text-zinc-600 text-xs mt-2">Strategic insights will be available in the next update.</p>
             </div>
           </div>
         )}
@@ -1515,5 +1683,6 @@ function App() {
         }
       `}</style>
     </div>
+    </APIProvider>
   );
 }

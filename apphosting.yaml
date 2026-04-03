@@ -1,19 +1,6 @@
-# Firebase App Hosting configuration
-# See: https://firebase.google.com/docs/app-hosting/configure
-# Force Sync: 2026-04-03T16:50:00Z
 kind: "AppStack"
 apiVersion: "v1"
-
-# Environment variables for the application
-# Note: Sensitive secrets should be managed via the Firebase Console
-env:
-  - name: NODE_ENV
-    value: production
-  - name: APP_URL
-    value: "https://connect.five24creativestudio.com"
-
-# Build configuration
-# Firebase App Hosting automatically detects Vite and Express
-# but you can override the build and start commands here if needed.
-# runConfig:
-#   command: npm run start
+runConfig:
+  cpu: 1
+  memoryMiB: 512
+# We are removing ALL 'env' blocks to stop the directory error

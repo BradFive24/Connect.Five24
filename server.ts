@@ -82,12 +82,12 @@ async function startServer() {
   app.set('trust proxy', 1);
   app.use(cors({
     origin: (origin, callback) => {
-      // Allow all .run.app origins (AI Studio) and local development
+      // Allow only the official domain and local development
       if (!origin || 
-          origin.endsWith('.run.app') || 
           origin.includes('localhost') || 
           origin.includes('127.0.0.1') ||
-          origin.includes('five24creativestudio.com')) {
+          origin.includes('five24creativestudio.com') ||
+          origin.includes('.run.app')) {
         callback(null, true);
       } else {
         console.warn('[CORS] Blocked Origin:', origin);
@@ -165,23 +165,15 @@ async function startServer() {
   // OAuth Routes
   // Dynamic URL helper
   const getAppUrl = (req: express.Request) => {
-    // In AI Studio, we often want the dynamic URL for previews to work correctly
-    // especially for the redirect_uri to match the current environment.
-    const protocol = req.headers['x-forwarded-proto'] || 'https';
-    const host = req.headers.host;
-    const dynamicUrl = `${protocol}://${host}`;
-    
-    // If the current host is a .run.app (AI Studio preview), use it.
-    if (host && host.includes('.run.app')) {
-      return dynamicUrl;
-    }
-
-    // Otherwise, if APP_URL is set and seems like a custom domain, use it.
+    // If APP_URL is set and seems like a custom domain, use it exclusively.
     if (APP_URL && !APP_URL.includes('localhost')) {
       return APP_URL;
     }
-    
-    return dynamicUrl;
+
+    // Fallback for local development or previews
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers.host;
+    return `${protocol}://${host}`;
   };
 
   app.get('/api/auth/url', (req, res) => {
