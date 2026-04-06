@@ -18,7 +18,7 @@ import { collection, onSnapshot, query, addDoc, serverTimestamp, updateDoc, doc,
 import { Lead, LeadStatus } from './types';
 import { seedInitialLeads } from './seed';
 import { getCoachPrompts, validateGeminiConnection } from './services/coachService';
-import { signIn, signOut } from './firebase';
+import { signIn } from './firebase';
 import { CoachPanel } from './components/CoachPanel';
 import { LeadGenerationModal } from './components/LeadGenerationModal';
 import { LeadPipeline } from './components/LeadPipeline';
@@ -97,12 +97,12 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 const GOOGLE_MAPS_API_KEY =
-  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
-  (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
+  (process.env.GOOGLE_MAPS_PLATFORM_KEY && !process.env.GOOGLE_MAPS_PLATFORM_KEY.includes('YOUR_GOOGLE_MAPS_API_KEY') ? process.env.GOOGLE_MAPS_PLATFORM_KEY : '') ||
+  ((import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY && !(import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY.includes('YOUR_GOOGLE_MAPS_API_KEY') ? (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY : '') ||
+  ((globalThis as any).GOOGLE_MAPS_PLATFORM_KEY && !(globalThis as any).GOOGLE_MAPS_PLATFORM_KEY.includes('YOUR_GOOGLE_MAPS_API_KEY') ? (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY : '') ||
   '';
 
-const DEBUG_MODE = true;
+const DEBUG_MODE = false;
 
 const getLocalGeminiKey = () => localStorage.getItem('GEMINI_API_KEY') || '';
 const getLocalMapsKey = () => localStorage.getItem('GOOGLE_MAPS_API_KEY') || '';
@@ -1195,7 +1195,7 @@ function App() {
               </div>
             </button>
             <button 
-              onClick={() => signOut()}
+              onClick={handleLogout}
               className="p-3 text-zinc-500 hover:text-rose-400 transition-colors group relative"
             >
               <LogOut className="w-6 h-6" />
@@ -1686,10 +1686,7 @@ function App() {
         homeAddress={userHomeAddress}
         simulationMode={simulationMode}
         onSave={handleSaveSettings}
-        onLogout={() => {
-          signOut();
-          setIsSettingsOpen(false);
-        }}
+        onLogout={handleLogout}
       />
 
       <style>{`

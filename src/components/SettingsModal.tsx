@@ -87,7 +87,7 @@ export function SettingsModal({ isOpen, onClose, geminiKey, mapsKey, homeAddress
                     type="password"
                     value={localGeminiKey}
                     onChange={(e) => setLocalGeminiKey(e.target.value)}
-                    placeholder="Enter your Gemini API Key"
+                    placeholder={geminiKey ? "Enter your Gemini API Key" : "Using system default Gemini key"}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500/50 transition-colors"
                   />
                   <p className="text-[9px] text-zinc-600 leading-relaxed">
@@ -110,6 +110,7 @@ export function SettingsModal({ isOpen, onClose, geminiKey, mapsKey, homeAddress
                   <p className="text-[9px] text-zinc-600 leading-relaxed">
                     Used for real-time radar tracking and local business search. 
                     <span className="text-emerald-500/80 block mt-1">Requires "Maps JavaScript API" and "Places API" to be enabled and unrestricted.</span>
+                    <span className="text-amber-500/80 block mt-1">If you see "API Key Blocked", ensure billing is linked and the AI Studio domain is not restricted.</span>
                   </p>
                 </div>
 

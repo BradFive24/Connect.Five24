@@ -353,11 +353,18 @@ export const LeadGenerationModal: React.FC<LeadGenerationModalProps> = ({
                     />
                   </div>
                   {(!map || typeof google === 'undefined' || isSimulationMode || mapError) ? (
-                    <div className="flex items-center gap-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                      <AlertCircle className="w-3 h-3 text-amber-500" />
-                      <p className="text-[9px] text-amber-500 font-bold uppercase tracking-tighter">
-                        Radar Offline - Using AI Simulation Fallback
-                      </p>
+                    <div className="flex flex-col gap-1 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-3 h-3 text-amber-500" />
+                        <p className="text-[9px] text-amber-500 font-bold uppercase tracking-tighter">
+                          Radar Offline - Using AI Simulation Fallback
+                        </p>
+                      </div>
+                      {mapError && (
+                        <p className="text-[8px] text-amber-500/70 font-mono leading-tight break-words">
+                          Error: {mapError}
+                        </p>
+                      )}
                     </div>
                   ) : userCoords && (
                     <p className="text-[9px] text-emerald-500 font-mono uppercase tracking-tighter flex items-center gap-1">
