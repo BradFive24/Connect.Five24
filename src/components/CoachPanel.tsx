@@ -9,6 +9,7 @@ import {
   AlertCircle, 
   Trash2,
   ChevronRight,
+  ChevronDown,
   Loader2,
   MapPin,
   DollarSign,
@@ -24,12 +25,14 @@ import {
   Tag,
   History,
   Plus,
-  CheckCircle2
+  CheckCircle2,
+  Brain
 } from 'lucide-react';
 import axios from 'axios';
 import { Lead, LeadStatus, Interaction } from '../types';
 import { getCoachPrompts } from '../services/coachService';
 import { cn } from '../lib/utils';
+import { GoogleGenAI, Type } from "@google/genai";
 
 interface CoachPanelProps {
   lead: Lead | null;
@@ -62,10 +65,14 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
   const [newTag, setNewTag] = useState('');
   const [nextStep, setNextStep] = useState('');
   const [verifiedByEU, setVerifiedByEU] = useState(false);
+  const [isSuggestingTags, setIsSuggestingTags] = useState(false);
+  const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
+  const [isNotesExpanded, setIsNotesExpanded] = useState(false);
 
   // Interaction Log State
   const [logContent, setLogContent] = useState('');
   const [logType, setLogType] = useState<Interaction['type']>('note');
+  const [logDueDate, setLogDueDate] = useState('');
 
   useEffect(() => {
     if (lead) {
@@ -128,7 +135,9 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
       id: `int-${Date.now()}`,
       type,
       content,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      dueDate: (type === 'appointment' || type === 'reminder') ? logDueDate : undefined,
+      completed: false
     };
 
     onUpdateLead({
@@ -139,6 +148,7 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
       }
     });
     setLogContent('');
+    setLogDueDate('');
   };
 
   const inferIndustry = useCallback(async (placeId: string) => {
@@ -198,6 +208,53 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
 
   const handleRefresh = () => {
     fetchPrompts(true);
+  };
+
+  const handleSuggestTags = async () => {
+    if (!lead) return;
+    const apiKey = userGeminiKey || process.env.GEMINI_API_KEY;
+    if (!apiKey) return;
+
+    setIsSuggestingTags(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `Based on the following lead information, suggest 3-5 relevant short tags (single words or short phrases).
+      Business Name: ${lead.source.name}
+      Notes: ${notes}
+      Interaction History: ${lead.crm.interactionHistory.map(h => h.content).join('; ')}
+      Current Tags: ${tags.join(', ')}
+      
+      Return the tags as a JSON array of strings.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING }
+          }
+        }
+      });
+
+      const newSuggestedTags = JSON.parse(response.text || '[]');
+      // Filter out tags already present
+      setSuggestedTags(newSuggestedTags.filter((t: string) => !tags.includes(t)));
+    } catch (err) {
+      console.error('Failed to suggest tags:', err);
+    } finally {
+      setIsSuggestingTags(false);
+    }
+  };
+
+  const acceptSuggestedTag = (tag: string) => {
+    setTags([...tags, tag]);
+    setSuggestedTags(suggestedTags.filter(t => t !== tag));
+  };
+
+  const dismissSuggestedTag = (tag: string) => {
+    setSuggestedTags(suggestedTags.filter(t => t !== tag));
   };
 
   return (
@@ -378,18 +435,58 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-[9px] text-zinc-600 uppercase font-bold ml-1">Notes</label>
-                        <textarea 
-                          value={notes}
-                          onChange={(e) => setNotes(e.target.value)}
-                          placeholder="Log general notes here..."
-                          rows={3}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-white focus:border-emerald-500 outline-none transition-all resize-none"
-                        />
+                        <label className="text-[9px] text-zinc-600 uppercase font-bold ml-1">Next Step</label>
+                        <div className="relative">
+                          <Target className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600" />
+                          <input 
+                            type="text"
+                            value={nextStep}
+                            onChange={(e) => setNextStep(e.target.value)}
+                            placeholder="What's the next action?"
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2 pl-9 pr-4 text-xs text-white focus:border-emerald-500 outline-none transition-all"
+                          />
+                        </div>
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-[9px] text-zinc-600 uppercase font-bold ml-1">Tags</label>
+                        <div className="flex items-center justify-between ml-1">
+                          <label className="text-[9px] text-zinc-600 uppercase font-bold">Notes</label>
+                          <button 
+                            onClick={() => setIsNotesExpanded(!isNotesExpanded)}
+                            className="text-[9px] text-zinc-500 hover:text-zinc-400 font-bold uppercase flex items-center gap-1 transition-colors"
+                          >
+                            {isNotesExpanded ? 'Collapse' : 'Expand'}
+                            <ChevronDown className={cn("w-2.5 h-2.5 transition-transform", isNotesExpanded && "rotate-180")} />
+                          </button>
+                        </div>
+                        <motion.div
+                          initial={false}
+                          animate={{ height: isNotesExpanded ? 'auto' : '40px' }}
+                          className="overflow-hidden"
+                        >
+                          <textarea 
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            placeholder="Log general notes here..."
+                            rows={isNotesExpanded ? 6 : 1}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-white focus:border-emerald-500 outline-none transition-all resize-none"
+                          />
+                        </motion.div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between ml-1">
+                          <label className="text-[9px] text-zinc-600 uppercase font-bold">Tags</label>
+                          <button 
+                            onClick={handleSuggestTags}
+                            disabled={isSuggestingTags}
+                            className="text-[9px] text-emerald-500 hover:text-emerald-400 font-bold uppercase flex items-center gap-1 transition-colors disabled:opacity-50"
+                          >
+                            {isSuggestingTags ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Brain className="w-2.5 h-2.5" />}
+                            Suggest AI Tags
+                          </button>
+                        </div>
+                        
                         <div className="flex flex-wrap gap-2 mb-2">
                           {tags.map((tag, i) => (
                             <span key={i} className="text-[9px] bg-zinc-900 px-2 py-1 rounded-lg border border-zinc-800 text-zinc-400 flex items-center gap-1">
@@ -399,6 +496,39 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
                             </span>
                           ))}
                         </div>
+
+                        <AnimatePresence>
+                          {suggestedTags.length > 0 && (
+                            <motion.div 
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3 mb-3 space-y-2"
+                            >
+                              <p className="text-[8px] text-emerald-500 font-bold uppercase tracking-widest">AI Suggested Tags:</p>
+                              <div className="flex flex-wrap gap-2">
+                                {suggestedTags.map((tag, i) => (
+                                  <motion.div 
+                                    key={tag}
+                                    initial={{ scale: 0.8, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    className="text-[9px] bg-zinc-900 px-2 py-1 rounded-lg border border-emerald-500/30 text-emerald-400 flex items-center gap-2"
+                                  >
+                                    {tag}
+                                    <div className="flex items-center gap-1 border-l border-emerald-500/20 pl-1 ml-1">
+                                      <button onClick={() => acceptSuggestedTag(tag)} className="hover:text-emerald-300">
+                                        <Plus className="w-2.5 h-2.5" />
+                                      </button>
+                                      <button onClick={() => dismissSuggestedTag(tag)} className="hover:text-rose-500">
+                                        <X className="w-2.5 h-2.5" />
+                                      </button>
+                                    </div>
+                                  </motion.div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                         <div className="flex gap-2">
                           <input 
                             type="text"
@@ -428,13 +558,13 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
 
                     <div className="space-y-4">
                       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
-                        <div className="flex gap-2">
-                          {(['call', 'visit', 'note'] as Interaction['type'][]).map((t) => (
+                        <div className="flex flex-wrap gap-2">
+                          {(['call', 'visit', 'email', 'note', 'appointment', 'reminder'] as Interaction['type'][]).map((t) => (
                             <button
                               key={t}
                               onClick={() => setLogType(t)}
                               className={cn(
-                                "flex-1 py-1.5 text-[8px] font-bold uppercase tracking-widest rounded-lg border transition-all",
+                                "flex-1 min-w-[60px] py-1.5 text-[8px] font-bold uppercase tracking-widest rounded-lg border transition-all",
                                 logType === t ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-500" : "bg-zinc-950 border-zinc-800 text-zinc-600"
                               )}
                             >
@@ -442,6 +572,18 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
                             </button>
                           ))}
                         </div>
+
+                        {(logType === 'appointment' || logType === 'reminder') && (
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] text-zinc-600 uppercase font-bold ml-1">Due Date / Time</label>
+                            <input 
+                              type="datetime-local"
+                              value={logDueDate}
+                              onChange={(e) => setLogDueDate(e.target.value)}
+                              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-4 text-xs text-white focus:border-emerald-500 outline-none transition-all"
+                            />
+                          </div>
+                        )}
                         <textarea 
                           value={logContent}
                           onChange={(e) => setLogContent(e.target.value)}
@@ -469,6 +611,9 @@ export const CoachPanel: React.FC<CoachPanelProps> = ({ lead, isOpen, onClose, o
                                   "text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded",
                                   int.type === 'call' ? "bg-blue-500/10 text-blue-500" :
                                   int.type === 'visit' ? "bg-amber-500/10 text-amber-500" :
+                                  int.type === 'email' ? "bg-emerald-500/10 text-emerald-500" :
+                                  int.type === 'appointment' ? "bg-blue-600/20 text-blue-400" :
+                                  int.type === 'reminder' ? "bg-rose-500/10 text-rose-500" :
                                   int.type === 'status_change' ? "bg-purple-500/10 text-purple-500" :
                                   "bg-zinc-800 text-zinc-400"
                                 )}>

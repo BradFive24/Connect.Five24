@@ -5,7 +5,7 @@ import {
   Radar, Target, MessageSquare, Plus, RefreshCw, DollarSign, Clock, MapPin, 
   Loader2, LogIn, Sparkles, AlertCircle, Key, CheckCircle2, ShieldCheck, 
   Lock, HelpCircle, Globe, UserCheck, Brain, ExternalLink, Settings,
-  LayoutDashboard, Users, BarChart3, ChevronRight, Bell, LogOut
+  LayoutDashboard, Users, BarChart3, ChevronRight, Bell, LogOut, Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
@@ -24,6 +24,7 @@ import { LeadGenerationModal } from './components/LeadGenerationModal';
 import { LeadPipeline } from './components/LeadPipeline';
 import { SettingsModal } from './components/SettingsModal';
 import { AIStudio } from './components/AIStudio';
+import ActivityCenter from './components/ActivityCenter';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -105,6 +106,7 @@ const DEBUG_MODE = true;
 
 const getLocalGeminiKey = () => localStorage.getItem('GEMINI_API_KEY') || '';
 const getLocalMapsKey = () => localStorage.getItem('GOOGLE_MAPS_API_KEY') || '';
+const getLocalHomeAddress = () => localStorage.getItem('HOME_ADDRESS') || '';
 
 // Global error interception for Google Maps
 if (typeof window !== 'undefined') {
@@ -124,7 +126,16 @@ if (typeof window !== 'undefined') {
   (window as any).gm_authFailure = () => {
     console.error('Google Maps authentication failed (gm_authFailure)');
     (window as any).__google_maps_error = true;
+    window.dispatchEvent(new CustomEvent('google-maps-error', { detail: 'gm_authFailure' }));
   };
+
+  // Global error listener for script loading issues
+  window.addEventListener('error', (event) => {
+    if (event.filename && event.filename.includes('maps.googleapis.com')) {
+      (window as any).__google_maps_error = true;
+      window.dispatchEvent(new CustomEvent('google-maps-error', { detail: 'script-load-error' }));
+    }
+  }, true);
 }
 
 export default function AppWrapper() {
@@ -138,7 +149,7 @@ export default function AppWrapper() {
 function App() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [activePage, setActivePage] = useState<'dashboard' | 'radar' | 'leads' | 'analytics' | 'ai-studio'>('radar');
+  const [activePage, setActivePage] = useState<'dashboard' | 'radar' | 'leads' | 'analytics' | 'ai-studio' | 'activity'>('dashboard');
   const [isCoachOpen, setIsCoachOpen] = useState(false);
   const [radarLocation, setRadarLocation] = useState({ lat: 37.42, lng: -122.08 });
   
@@ -170,6 +181,7 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [userGeminiKey, setUserGeminiKey] = useState(getLocalGeminiKey());
   const [userMapsKey, setUserMapsKey] = useState(getLocalMapsKey());
+  const [userHomeAddress, setUserHomeAddress] = useState(getLocalHomeAddress());
 
   const effectiveMapsKey = userMapsKey || GOOGLE_MAPS_API_KEY;
   
@@ -252,7 +264,7 @@ function App() {
       if (data.authenticated) {
         setHasBeenAuthenticated(true);
         if (data.onboardingCompleted) {
-          setOnboardingStep(3); // Skip to Sales Radar
+          setOnboardingStep(3); // Skip to Dashboard
         } else {
           setOnboardingStep(2); // Go to Step 2 of onboarding
         }
@@ -313,13 +325,32 @@ function App() {
       setFirebaseUser(user);
       setIsAuthReady(true);
     });
+
+    const handleMapsError = (detail?: string) => {
+      const isPreview = window.location.hostname.includes('.run.app');
+      let errorMsg = '';
+      
+      if (detail === 'gm_authFailure' || detail === 'ApiTargetBlockedMapError') {
+        errorMsg = isPreview 
+          ? 'ApiTargetBlockedMapError: Maps JavaScript API is restricted and doesn\'t allow the AI Studio preview domain (.run.app). Your API Key likely has "HTTP Referrer" restrictions.'
+          : 'ApiTargetBlockedMapError: Maps JavaScript API is not authorized for this key. Ensure "Maps JavaScript API" and "Places API" are enabled and authorized for this domain.';
+      } else {
+        errorMsg = 'Google Maps failed to load. This could be due to network issues or an invalid API key.';
+      }
+      
+      setMapError(errorMsg);
+      // Automatically switch to simulation mode if it's a fatal error
+      setSimulationMode(true);
+    };
+
+    window.addEventListener('google-maps-error', ((e: CustomEvent) => handleMapsError(e.detail)) as any);
     
     if (!effectiveMapsKey) {
       setMapError('ApiTargetBlockedMapError: Google Maps API Key is missing. Please add it in Connection Settings.');
       setSimulationMode(true);
     }
 
-    // Catch Google Maps API errors
+    // Catch Google Maps API errors via console.error
     const originalError = console.error;
     console.error = (...args) => {
       const message = args.map(arg => {
@@ -328,32 +359,19 @@ function App() {
       }).join(' ');
       
       if (message.includes('ApiTargetBlockedMapError') || message.includes('gm_authFailure')) {
-        const isPreview = window.location.hostname.includes('.run.app');
-        const errorMsg = isPreview 
-          ? 'ApiTargetBlockedMapError: Maps JavaScript API is restricted and doesn\'t allow the AI Studio preview domain (.run.app). Please use an unrestricted key for testing or enable simulation mode.'
-          : 'ApiTargetBlockedMapError: Maps JavaScript API is not authorized for this key. Ensure "Maps JavaScript API" and "Places API" are enabled and authorized for this domain.';
-        setMapError(errorMsg);
-        // Don't force simulationMode to false if the user explicitly wants it
+        handleMapsError(message.includes('gm_authFailure') ? 'gm_authFailure' : 'ApiTargetBlockedMapError');
       }
       originalError.apply(console, args);
     };
 
     // Standard Google Maps auth failure handler
     (window as any).gm_authFailure = () => {
-      const isPreview = window.location.hostname.includes('.run.app');
-      const errorMsg = isPreview
-        ? 'ApiTargetBlockedMapError: Google Maps authentication failed. Your API Key likely has "HTTP Referrer" restrictions that block the AI Studio preview domain (.run.app).'
-        : 'ApiTargetBlockedMapError: Google Maps authentication failed. This usually means your API Key is restricted and doesn\'t allow the "Maps JavaScript API" or "Places API".';
-      console.error('Google Maps authentication failed (gm_authFailure)');
-      setMapError(errorMsg);
+      handleMapsError('gm_authFailure');
     };
 
     // Check for global error flag
     if ((window as any).__google_maps_error) {
-      const isPreview = window.location.hostname.includes('.run.app');
-      setMapError(isPreview 
-        ? 'ApiTargetBlockedMapError: Maps JavaScript API is restricted for the preview domain.' 
-        : 'ApiTargetBlockedMapError: Maps JavaScript API is not authorized for this key.');
+      handleMapsError();
     }
 
     // Global error listener for script loading issues
@@ -1095,11 +1113,13 @@ function App() {
     }
   }, [isAuthReady, purgeOldLeads]);
 
-  const handleSaveSettings = (gemini: string, maps: string, simulation: boolean) => {
+  const handleSaveSettings = (gemini: string, maps: string, simulation: boolean, home: string) => {
     localStorage.setItem('GEMINI_API_KEY', gemini);
     localStorage.setItem('GOOGLE_MAPS_API_KEY', maps);
+    localStorage.setItem('HOME_ADDRESS', home);
     setUserGeminiKey(gemini);
     setUserMapsKey(maps);
+    setUserHomeAddress(home);
     setSimulationMode(simulation);
     
     // If we just added a maps key and simulation is off, try to clear errors
@@ -1123,13 +1143,14 @@ function App() {
         <div className="w-20 border-r border-zinc-800 flex flex-col items-center py-8 bg-zinc-950 z-50">
           <div className="mb-12">
             <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <Radar className="w-6 h-6 text-zinc-950" />
+              <Target className="w-6 h-6 text-zinc-950" />
             </div>
           </div>
           
           <div className="flex-1 flex flex-col gap-4">
             {[
               { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+              { id: 'activity', icon: Calendar, label: 'Activity Center' },
               { id: 'radar', icon: Radar, label: 'Lead Radar' },
               { id: 'leads', icon: Users, label: 'Pipeline' },
               { id: 'ai-studio', icon: Brain, label: 'AI Studio' },
@@ -1274,7 +1295,17 @@ function App() {
 
       {/* Main View */}
       <div className="flex-1 relative flex flex-col">
-        {activePage === 'dashboard' ? (
+        {activePage === 'activity' ? (
+          <div className="flex-1 bg-zinc-950 overflow-y-auto custom-scrollbar">
+            <ActivityCenter 
+              leads={leads} 
+              onSelectLead={(lead) => {
+                setSelectedLead(lead);
+                setIsCoachOpen(true);
+              }} 
+            />
+          </div>
+        ) : activePage === 'dashboard' ? (
           <div className="flex-1 bg-zinc-950 p-8 overflow-y-auto custom-scrollbar">
             <div className="max-w-6xl mx-auto">
               <header className="mb-12">
@@ -1456,8 +1487,8 @@ function App() {
                       <ol className="list-decimal list-inside space-y-2 text-zinc-400">
                         <li>Go to <a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" className="underline text-emerald-400 hover:text-emerald-300">Google Cloud Credentials</a></li>
                         <li>Click on your API Key to edit it.</li>
-                        <li>Under <strong>API restrictions</strong>, select <strong>"Restrict key"</strong>.</li>
-                        <li>In the dropdown, find and check <strong>"Maps JavaScript API"</strong> AND <strong>"Places API"</strong>.</li>
+                        <li>Under <strong>API restrictions</strong>, ensure <strong>"Maps JavaScript API"</strong> AND <strong>"Places API"</strong> are checked.</li>
+                        <li>Under <strong>Application restrictions</strong>, either select <strong>"None"</strong> (for testing) or add <code>*.run.app/*</code> to the <strong>Website restrictions</strong>.</li>
                         <li>Click <strong>Save</strong> and wait ~60 seconds for propagation.</li>
                       </ol>
                     </div>
@@ -1644,6 +1675,7 @@ function App() {
         isSimulationMode={simulationMode}
         mapError={mapError}
         userGeminiKey={userGeminiKey}
+        homeAddress={userHomeAddress}
       />
 
       <SettingsModal
@@ -1651,6 +1683,7 @@ function App() {
         onClose={() => setIsSettingsOpen(false)}
         geminiKey={userGeminiKey}
         mapsKey={userMapsKey}
+        homeAddress={userHomeAddress}
         simulationMode={simulationMode}
         onSave={handleSaveSettings}
         onLogout={() => {

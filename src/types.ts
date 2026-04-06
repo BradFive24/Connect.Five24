@@ -2,9 +2,11 @@ export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal' | 'close
 
 export interface Interaction {
   id: string;
-  type: 'call' | 'visit' | 'note' | 'status_change';
+  type: 'call' | 'visit' | 'note' | 'status_change' | 'email' | 'appointment' | 'reminder';
   content: string;
   timestamp: string;
+  dueDate?: string; // For appointments and reminders
+  completed?: boolean;
 }
 
 export interface Lead {

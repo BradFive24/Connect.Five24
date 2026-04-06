@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Search, Sparkles, MapPin, Target, Loader2, Plus, Phone, Globe, Star, AlertCircle } from 'lucide-react';
+import { X, Search, Sparkles, MapPin, Target, Loader2, Plus, Phone, Globe, Star, AlertCircle, ChevronUp, ChevronDown } from 'lucide-react';
 import { useMap } from "@vis.gl/react-google-maps";
 import { GoogleGenAI, Type } from "@google/genai";
 import { setDoc, doc } from 'firebase/firestore';
@@ -20,6 +20,7 @@ interface SearchResult {
     lat: number;
     lng: number;
   };
+  distance?: number;
 }
 
 interface LeadGenerationModalProps {
@@ -29,6 +30,7 @@ interface LeadGenerationModalProps {
   isSimulationMode?: boolean;
   mapError?: string | null;
   userGeminiKey?: string;
+  homeAddress?: string;
 }
 
 export const LeadGenerationModal: React.FC<LeadGenerationModalProps> = ({ 
@@ -37,14 +39,69 @@ export const LeadGenerationModal: React.FC<LeadGenerationModalProps> = ({
   onLeadConverted,
   isSimulationMode = false,
   mapError = null,
-  userGeminiKey = ''
+  userGeminiKey = '',
+  homeAddress = ''
 }) => {
   const map = useMap();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [homeCoords, setHomeCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof SearchResult; direction: 'asc' | 'desc' } | null>(null);
+
+  useEffect(() => {
+    if (isOpen && homeAddress && typeof google !== 'undefined') {
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ address: homeAddress }, (results: any, status: string) => {
+        if (status === 'OK' && results[0]) {
+          setHomeCoords({
+            lat: results[0].geometry.location.lat(),
+            lng: results[0].geometry.location.lng()
+          });
+        }
+      });
+    }
+  }, [isOpen, homeAddress]);
+
+  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+    const R = 3958.8; // Radius of the Earth in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const sortedResults = React.useMemo(() => {
+    let sortableResults = [...results];
+    if (sortConfig !== null) {
+      sortableResults.sort((a: any, b: any) => {
+        const aVal = a[sortConfig.key] ?? 0;
+        const bVal = b[sortConfig.key] ?? 0;
+        if (aVal < bVal) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (aVal > bVal) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableResults;
+  }, [results, sortConfig]);
+
+  const requestSort = (key: keyof SearchResult) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
 
   useEffect(() => {
     if (isOpen && navigator.geolocation) {
@@ -85,18 +142,22 @@ export const LeadGenerationModal: React.FC<LeadGenerationModalProps> = ({
 
       service.textSearch(request, async (results: any[], status: string) => {
         if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-          const searchResults: SearchResult[] = results.map((result) => ({
-            placeId: result.place_id,
-            name: result.name || 'Unknown Business',
-            rating: result.rating,
-            userRatingCount: result.user_ratings_total,
-            location: {
-              lat: result.geometry?.location?.lat() || 0,
-              lng: result.geometry?.location?.lng() || 0
-            },
-            formattedAddress: result.formatted_address,
-            phoneNumber: '', 
-          }));
+          const searchResults: SearchResult[] = results.map((result) => {
+            const lat = result.geometry?.location?.lat() || 0;
+            const lng = result.geometry?.location?.lng() || 0;
+            const distance = homeCoords ? calculateDistance(homeCoords.lat, homeCoords.lng, lat, lng) : undefined;
+            
+            return {
+              placeId: result.place_id,
+              name: result.name || 'Unknown Business',
+              rating: result.rating,
+              userRatingCount: result.user_ratings_total,
+              location: { lat, lng },
+              formattedAddress: result.formatted_address,
+              phoneNumber: '', 
+              distance
+            };
+          });
 
           const detailedResultsPromises = searchResults.slice(0, 10).map(res => {
             return new Promise<SearchResult>((resolve) => {
@@ -178,15 +239,19 @@ export const LeadGenerationModal: React.FC<LeadGenerationModalProps> = ({
       });
 
       const rawResults = JSON.parse(response.text || '[]');
-      const processedResults: SearchResult[] = rawResults.map((l: any) => ({
-        placeId: l.placeId,
-        name: l.name,
-        rating: l.rating,
-        userRatingCount: l.userRatingCount,
-        location: { lat: l.lat, lng: l.lng },
-        formattedAddress: l.formattedAddress,
-        phoneNumber: l.phoneNumber,
-      }));
+      const processedResults: SearchResult[] = rawResults.map((l: any) => {
+        const distance = homeCoords ? calculateDistance(homeCoords.lat, homeCoords.lng, l.lat, l.lng) : undefined;
+        return {
+          placeId: l.placeId,
+          name: l.name,
+          rating: l.rating,
+          userRatingCount: l.userRatingCount,
+          location: { lat: l.lat, lng: l.lng },
+          formattedAddress: l.formattedAddress,
+          phoneNumber: l.phoneNumber,
+          distance
+        };
+      });
 
       setResults(processedResults);
     } catch (error) {
@@ -331,45 +396,97 @@ export const LeadGenerationModal: React.FC<LeadGenerationModalProps> = ({
                     <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500">Local Results ({results.length})</h3>
                     <button onClick={() => setResults([])} className="text-[10px] text-zinc-600 hover:text-zinc-400 uppercase font-bold">Clear All</button>
                   </div>
-                  <div className="max-h-[300px] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-                    {results.map((result) => (
-                      <div key={result.placeId} className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl flex justify-between items-start group hover:border-emerald-500/50 transition-colors">
-                        <div className="flex-1">
-                          <h4 className="font-bold text-sm mb-1">{result.name}</h4>
-                          <p className="text-[10px] text-zinc-500 mb-2 flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {result.formattedAddress}
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {result.phoneNumber && (
-                              <span className="text-[9px] bg-zinc-900 px-2 py-0.5 rounded-full text-zinc-400 border border-zinc-800 flex items-center gap-1">
-                                <Phone className="w-2.5 h-2.5" />
-                                {result.phoneNumber}
-                              </span>
-                            )}
-                            {result.rating && (
-                              <div className="flex items-center gap-1 text-[9px] text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded-full border border-zinc-800">
-                                <span>{result.rating}</span>
-                                <Star className="w-2.5 h-2.5 text-emerald-500 fill-emerald-500" />
-                                <span className="text-zinc-600">({result.userRatingCount})</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleConvert(result)}
-                          disabled={convertingId === result.placeId}
-                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2"
-                        >
-                          {convertingId === result.placeId ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <Plus className="w-3 h-3" />
-                          )}
-                          Convert
-                        </button>
-                      </div>
-                    ))}
+                  <div className="max-h-[400px] overflow-auto border border-zinc-800 rounded-2xl bg-zinc-950 custom-scrollbar">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="sticky top-0 bg-zinc-900 z-10">
+                        <tr className="border-b border-zinc-800">
+                          <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Business Name</th>
+                          <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Address</th>
+                          <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Phone</th>
+                          <th 
+                            className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-emerald-500 transition-colors"
+                            onClick={() => requestSort('rating')}
+                          >
+                            <div className="flex items-center gap-1">
+                              Rating
+                              {sortConfig?.key === 'rating' && (
+                                sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                              )}
+                            </div>
+                          </th>
+                          <th 
+                            className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-emerald-500 transition-colors"
+                            onClick={() => requestSort('userRatingCount')}
+                          >
+                            <div className="flex items-center gap-1">
+                              Reviews
+                              {sortConfig?.key === 'userRatingCount' && (
+                                sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                              )}
+                            </div>
+                          </th>
+                          <th 
+                            className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-emerald-500 transition-colors"
+                            onClick={() => requestSort('distance')}
+                          >
+                            <div className="flex items-center gap-1">
+                              Distance
+                              {sortConfig?.key === 'distance' && (
+                                sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                              )}
+                            </div>
+                          </th>
+                          <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-800/50">
+                        {sortedResults.map((result) => (
+                          <tr key={result.placeId} className="group hover:bg-zinc-900/50 transition-colors">
+                            <td className="px-4 py-3">
+                              <p className="text-sm font-bold text-white truncate max-w-[150px]">{result.name}</p>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="text-[10px] text-zinc-500 truncate max-w-[200px]">{result.formattedAddress}</p>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="text-[10px] text-zinc-400 font-mono">{result.phoneNumber || '—'}</p>
+                            </td>
+                            <td className="px-4 py-3">
+                              {result.rating ? (
+                                <div className="flex items-center gap-1 text-[10px] text-zinc-400">
+                                  <span className="font-bold text-emerald-500">{result.rating}</span>
+                                  <Star className="w-2.5 h-2.5 text-emerald-500 fill-emerald-500" />
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-zinc-700">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="text-[10px] text-zinc-500">{result.userRatingCount || 0}</p>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="text-[10px] text-zinc-400 font-mono">
+                                {result.distance !== undefined ? `${result.distance.toFixed(1)} mi` : '—'}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                onClick={() => handleConvert(result)}
+                                disabled={convertingId === result.placeId}
+                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all"
+                              >
+                                {convertingId === result.placeId ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Plus className="w-3 h-3" />
+                                )}
+                                Convert
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                   <div className="flex items-center justify-center pt-4">
                     <img 

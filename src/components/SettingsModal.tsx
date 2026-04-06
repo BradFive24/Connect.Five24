@@ -14,25 +14,28 @@ interface SettingsModalProps {
   onClose: () => void;
   geminiKey: string;
   mapsKey: string;
+  homeAddress: string;
   simulationMode: boolean;
-  onSave: (geminiKey: string, mapsKey: string, simulationMode: boolean) => void;
+  onSave: (geminiKey: string, mapsKey: string, simulationMode: boolean, homeAddress: string) => void;
   onLogout?: () => void;
 }
 
-export function SettingsModal({ isOpen, onClose, geminiKey, mapsKey, simulationMode, onSave, onLogout }: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose, geminiKey, mapsKey, homeAddress, simulationMode, onSave, onLogout }: SettingsModalProps) {
   const [localGeminiKey, setLocalGeminiKey] = useState(geminiKey);
   const [localMapsKey, setLocalMapsKey] = useState(mapsKey);
+  const [localHomeAddress, setLocalHomeAddress] = useState(homeAddress);
   const [localSimulationMode, setLocalSimulationMode] = useState(simulationMode);
   const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
     setLocalGeminiKey(geminiKey);
     setLocalMapsKey(mapsKey);
+    setLocalHomeAddress(homeAddress);
     setLocalSimulationMode(simulationMode);
-  }, [geminiKey, mapsKey, simulationMode]);
+  }, [geminiKey, mapsKey, homeAddress, simulationMode]);
 
   const handleSave = () => {
-    onSave(localGeminiKey, localMapsKey, localSimulationMode);
+    onSave(localGeminiKey, localMapsKey, localSimulationMode, localHomeAddress);
     setIsSaved(true);
     setTimeout(() => {
       setIsSaved(false);
@@ -107,6 +110,23 @@ export function SettingsModal({ isOpen, onClose, geminiKey, mapsKey, simulationM
                   <p className="text-[9px] text-zinc-600 leading-relaxed">
                     Used for real-time radar tracking and local business search. 
                     <span className="text-emerald-500/80 block mt-1">Requires "Maps JavaScript API" and "Places API" to be enabled and unrestricted.</span>
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                    <MapPin className="w-3 h-3" />
+                    Home Office Address
+                  </label>
+                  <input
+                    type="text"
+                    value={localHomeAddress}
+                    onChange={(e) => setLocalHomeAddress(e.target.value)}
+                    placeholder="Enter your home office address"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500/50 transition-colors"
+                  />
+                  <p className="text-[9px] text-zinc-600 leading-relaxed">
+                    Used to calculate distance to potential leads.
                   </p>
                 </div>
 

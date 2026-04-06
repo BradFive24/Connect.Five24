@@ -41,9 +41,11 @@
                 "type": "object",
                 "properties": {
                   "id": { "type": "string" },
-                  "type": { "type": "string", "enum": ["call", "visit", "note", "status_change"] },
+                  "type": { "type": "string", "enum": ["call", "visit", "note", "status_change", "email", "appointment", "reminder"] },
                   "content": { "type": "string" },
-                  "timestamp": { "type": "string", "format": "date-time" }
+                  "timestamp": { "type": "string", "format": "date-time" },
+                  "dueDate": { "type": "string", "format": "date-time" },
+                  "completed": { "type": "boolean" }
                 }
               }
             },
