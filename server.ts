@@ -489,7 +489,16 @@ ${JSON.stringify(errorDetail, null, 2)}
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    
+    // Serve static files from dist
+    app.use(express.static(distPath, { index: false }));
+
+    // Explicitly handle assets to avoid falling back to index.html for missing files
+    app.get('/assets/*', (req, res) => {
+      res.status(404).send('Asset not found');
+    });
+
+    // Catch-all route for SPA
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
