@@ -45,10 +45,17 @@ const getAdminConfig = () => {
 };
 
 const adminConfig = getAdminConfig();
-const adminApp = initializeApp({
-  projectId: adminConfig.projectId,
-});
-const adminDb = getFirestore(adminApp, adminConfig.databaseId);
+let adminDb: any;
+
+try {
+  const adminApp = initializeApp({
+    projectId: adminConfig.projectId,
+  });
+  adminDb = getFirestore(adminApp, adminConfig.databaseId);
+  console.log(`[FIREBASE] Admin initialized for project: ${adminConfig.projectId}, database: ${adminConfig.databaseId}`);
+} catch (error) {
+  console.error('[FIREBASE] Failed to initialize Firebase Admin:', error);
+}
 
 // OAuth Configuration
 const rawAppUrl = process.env.APP_URL || 'https://connect.five24creativestudio.com';
@@ -65,7 +72,7 @@ if (!CLIENT_ID || !CLIENT_SECRET) {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 8080;
 
   console.log('Starting Five24 Connect Server...');
   console.log('Environment Check:');
@@ -129,6 +136,19 @@ async function startServer() {
   };
 
   // API Routes
+  app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // Basic root route for health checks (Cloud Run/Firebase App Hosting)
+  app.get('/', (req, res, next) => {
+    // If it's a health check or doesn't want HTML, return a simple response
+    if (req.headers['user-agent']?.includes('GoogleHC') || !req.accepts('html')) {
+      return res.send('Five24 Connect Server is running.');
+    }
+    next();
+  });
+
   app.get('/api/auth/test', (req, res) => {
     const currentAppUrl = getAppUrl(req);
     const dynamicRedirectUri = `${currentAppUrl}/auth/callback`;
@@ -153,6 +173,10 @@ async function startServer() {
 
   app.get('/api/leads', requireAuth, async (req, res) => {
     try {
+      if (!adminDb) {
+        console.error('[API] adminDb not initialized');
+        return res.status(503).json({ error: 'Database service unavailable' });
+      }
       const snapshot = await adminDb.collection('leads').get();
       const leads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       res.json(leads);
@@ -311,9 +335,13 @@ ${JSON.stringify(errorDetail, null, 2)}
           console.log('Verified Email:', email);
 
           if (email) {
-            const userDoc = await adminDb.collection('users').doc(email).get();
-            if (userDoc.exists && userDoc.data()?.onboardingCompleted) {
-              onboardingCompleted = true;
+            if (!adminDb) {
+              console.warn('[AUTH] adminDb not initialized for status check');
+            } else {
+              const userDoc = await adminDb.collection('users').doc(email).get();
+              if (userDoc.exists && userDoc.data()?.onboardingCompleted) {
+                onboardingCompleted = true;
+              }
             }
           }
         } else {
@@ -400,6 +428,10 @@ ${JSON.stringify(errorDetail, null, 2)}
       }
 
       if (userEmail !== 'unknown') {
+        if (!adminDb) {
+          console.error('[GCP] adminDb not initialized for onboarding');
+          return res.status(503).json({ error: 'Database service unavailable' });
+        }
         await adminDb.collection('users').doc(userEmail).set({
           onboardingCompleted: true,
           projectId,
@@ -464,7 +496,7 @@ ${JSON.stringify(errorDetail, null, 2)}
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Five24 Connect Server running on http://localhost:${PORT}`);
+    console.log(`Five24 Connect Server running on port ${PORT}`);
   });
 }
 
